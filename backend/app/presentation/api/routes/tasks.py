@@ -21,10 +21,11 @@ from app.application.use_cases.tasks.update_task import UpdateTaskUseCase
 from app.core.dependencies import get_task_repository, get_user_repository
 from app.domain.entities.user import User
 from app.domain.exceptions import AssigneeNotFoundError, TaskAuthorizationError, TaskNotFoundError
-from app.domain.repositories.task_repository import TaskRepository
+from app.domain.repositories.task_repository import TaskFilters, TaskRepository
 from app.domain.repositories.user_repository import UserRepository
 from app.presentation.api.dependencies.auth import get_current_user
 from app.presentation.api.dependencies.pagination import PaginationParams, pagination_params
+from app.presentation.api.dependencies.task_filters import task_filters
 
 router = APIRouter(prefix="/api/v1/tasks", tags=["tasks"])
 
@@ -33,10 +34,13 @@ router = APIRouter(prefix="/api/v1/tasks", tags=["tasks"])
 async def list_tasks(
     current_user: Annotated[User, Depends(get_current_user)],
     pagination: Annotated[PaginationParams, Depends(pagination_params)],
+    filters: Annotated[TaskFilters, Depends(task_filters)],
     task_repository: Annotated[TaskRepository, Depends(get_task_repository)],
 ) -> TaskListResponse:
     use_case = ListTasksUseCase(task_repository=task_repository)
-    items, total = await use_case.execute(page=pagination.page, page_size=pagination.page_size)
+    items, total = await use_case.execute(
+        page=pagination.page, page_size=pagination.page_size, filters=filters
+    )
     pages = ceil(total / pagination.page_size) if total else 0
     return TaskListResponse(
         items=[TaskResponse.model_validate(task) for task in items],

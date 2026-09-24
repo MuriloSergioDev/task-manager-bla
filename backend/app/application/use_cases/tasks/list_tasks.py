@@ -1,12 +1,16 @@
 from dataclasses import dataclass
 
 from app.domain.entities.task import Task
-from app.domain.repositories.task_repository import TaskRepository
+from app.domain.repositories.task_repository import TaskFilters, TaskRepository
 
 
 @dataclass
 class ListTasksUseCase:
     task_repository: TaskRepository
 
-    async def execute(self, *, page: int, page_size: int) -> tuple[list[Task], int]:
-        return await self.task_repository.list_paginated(page=page, page_size=page_size)
+    async def execute(
+        self, *, page: int, page_size: int, filters: TaskFilters | None = None
+    ) -> tuple[list[Task], int]:
+        return await self.task_repository.list_paginated(
+            page=page, page_size=page_size, filters=filters or TaskFilters()
+        )

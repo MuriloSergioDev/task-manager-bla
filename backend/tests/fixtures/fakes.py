@@ -3,6 +3,7 @@ from uuid import UUID
 
 from app.domain.entities.task import Task
 from app.domain.entities.user import User
+from app.domain.repositories.task_repository import TaskFilters
 from tests.fixtures.factories import build_task, build_user
 
 
@@ -33,11 +34,14 @@ class FakeTaskRepository:
     async def get_by_id(self, task_id: UUID) -> Task | None:
         return self._tasks.get(task_id)
 
-    async def list_paginated(self, *, page: int, page_size: int) -> tuple[list[Task], int]:
-        all_tasks = sorted(self._tasks.values(), key=lambda task: task.created_at, reverse=True)
-        total = len(all_tasks)
+    async def list_paginated(
+        self, *, page: int, page_size: int, filters: TaskFilters
+    ) -> tuple[list[Task], int]:
+        matching = [task for task in self._tasks.values() if _matches(task, filters)]
+        matching.sort(key=lambda task: task.created_at, reverse=True)
+        total = len(matching)
         start = (page - 1) * page_size
-        return all_tasks[start : start + page_size], total
+        return matching[start : start + page_size], total
 
     async def save(self, task: Task) -> Task:
         self._tasks[task.id] = task
@@ -46,6 +50,21 @@ class FakeTaskRepository:
     async def delete(self, task_id: UUID) -> None:
         self._tasks.pop(task_id, None)
         self.deleted_ids.append(task_id)
+
+
+def _matches(task: Task, filters: TaskFilters) -> bool:
+    if filters.status is not None and task.status != filters.status:
+        return False
+    if filters.due_date is not None and task.due_date != filters.due_date:
+        return False
+    if filters.due_date_from is not None and (
+        task.due_date is None or task.due_date < filters.due_date_from
+    ):
+        return False
+    return not (
+        filters.due_date_to is not None
+        and (task.due_date is None or task.due_date > filters.due_date_to)
+    )
 
 
 class FakeUserRepository:

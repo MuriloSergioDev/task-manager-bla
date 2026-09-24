@@ -2,6 +2,7 @@ from datetime import date
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.domain.repositories.task_repository import TaskFilters
 from app.infrastructure.database.models import UserModel
 from app.infrastructure.repositories.sqlalchemy_task_repository import SqlAlchemyTaskRepository
 
@@ -57,7 +58,7 @@ async def test_list_paginated_orders_newest_first_and_reports_total(
             assigned_to=None,
         )
 
-    items, total = await repository.list_paginated(page=1, page_size=2)
+    items, total = await repository.list_paginated(page=1, page_size=2, filters=TaskFilters())
 
     assert total == 3
     assert len(items) == 2

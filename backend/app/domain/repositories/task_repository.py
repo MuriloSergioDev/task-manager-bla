@@ -1,8 +1,17 @@
+from dataclasses import dataclass
 from datetime import date
 from typing import Protocol
 from uuid import UUID
 
-from app.domain.entities.task import Task
+from app.domain.entities.task import Task, TaskStatus
+
+
+@dataclass(frozen=True)
+class TaskFilters:
+    status: TaskStatus | None = None
+    due_date: date | None = None
+    due_date_from: date | None = None
+    due_date_to: date | None = None
 
 
 class TaskRepository(Protocol):
@@ -18,7 +27,9 @@ class TaskRepository(Protocol):
 
     async def get_by_id(self, task_id: UUID) -> Task | None: ...
 
-    async def list_paginated(self, *, page: int, page_size: int) -> tuple[list[Task], int]: ...
+    async def list_paginated(
+        self, *, page: int, page_size: int, filters: TaskFilters
+    ) -> tuple[list[Task], int]: ...
 
     async def save(self, task: Task) -> Task:
         """Persist all mutable fields of an already-merged Task entity.

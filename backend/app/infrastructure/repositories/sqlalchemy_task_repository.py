@@ -1,10 +1,11 @@
 from datetime import date
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.entities.task import Task
+from app.domain.repositories.task_repository import TaskFilters
 from app.infrastructure.database.models import TaskModel
 
 
@@ -38,11 +39,21 @@ class SqlAlchemyTaskRepository:
         model = result.scalar_one_or_none()
         return _to_entity(model) if model is not None else None
 
-    async def list_paginated(self, *, page: int, page_size: int) -> tuple[list[Task], int]:
-        total = await self._session.scalar(select(func.count()).select_from(TaskModel))
+    async def list_paginated(
+        self, *, page: int, page_size: int, filters: TaskFilters
+    ) -> tuple[list[Task], int]:
+        conditions = _build_filter_conditions(filters)
+
+        count_query = select(func.count()).select_from(TaskModel)
+        list_query = select(TaskModel)
+        if conditions:
+            count_query = count_query.where(*conditions)
+            list_query = list_query.where(*conditions)
+
+        total = await self._session.scalar(count_query)
         offset = (page - 1) * page_size
         result = await self._session.execute(
-            select(TaskModel).order_by(TaskModel.created_at.desc()).offset(offset).limit(page_size)
+            list_query.order_by(TaskModel.created_at.desc()).offset(offset).limit(page_size)
         )
         models = result.scalars().all()
         return [_to_entity(model) for model in models], total or 0
@@ -68,6 +79,19 @@ class SqlAlchemyTaskRepository:
         if model is not None:
             await self._session.delete(model)
             await self._session.commit()
+
+
+def _build_filter_conditions(filters: TaskFilters) -> list[ColumnElement[bool]]:
+    conditions: list[ColumnElement[bool]] = []
+    if filters.status is not None:
+        conditions.append(TaskModel.status == filters.status)
+    if filters.due_date is not None:
+        conditions.append(TaskModel.due_date == filters.due_date)
+    if filters.due_date_from is not None:
+        conditions.append(TaskModel.due_date >= filters.due_date_from)
+    if filters.due_date_to is not None:
+        conditions.append(TaskModel.due_date <= filters.due_date_to)
+    return conditions
 
 
 def _to_entity(model: TaskModel) -> Task:
