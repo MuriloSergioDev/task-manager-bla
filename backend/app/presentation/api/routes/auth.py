@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from app.application.schemas.auth_schemas import LoginRequest, RegisterRequest, TokenResponse
 from app.application.schemas.user_schemas import UserResponse
@@ -10,15 +10,23 @@ from app.application.use_cases.auth.register_user import (
     RegisterUserUseCase,
 )
 from app.core.dependencies import get_password_hasher, get_token_service, get_user_repository
+from app.core.rate_limit import limiter
 from app.domain.repositories.user_repository import UserRepository
 from app.domain.services.password_hasher import PasswordHasher
 from app.domain.services.token_service import TokenService
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
+# Login/register are unauthenticated and credential-adjacent, so they get a
+# stricter limit than the app-wide default to slow brute-force/mass-signup
+# attempts.
+AUTH_RATE_LIMIT = "5/minute"
+
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit(AUTH_RATE_LIMIT)
 async def register(
+    request: Request,
     payload: RegisterRequest,
     user_repository: Annotated[UserRepository, Depends(get_user_repository)],
     password_hasher: Annotated[PasswordHasher, Depends(get_password_hasher)],
@@ -35,7 +43,9 @@ async def register(
 
 
 @router.post("/login", response_model=TokenResponse)
+@limiter.limit(AUTH_RATE_LIMIT)
 async def login(
+    request: Request,
     payload: LoginRequest,
     user_repository: Annotated[UserRepository, Depends(get_user_repository)],
     password_hasher: Annotated[PasswordHasher, Depends(get_password_hasher)],

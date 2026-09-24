@@ -83,3 +83,13 @@ class FakeUserRepository:
         self._users[user.id] = user
         self._users_by_email[email] = user
         return user
+
+
+class FakeActivityDispatcher:
+    def __init__(self) -> None:
+        self.dispatched: list[tuple[UUID, UUID, str]] = []
+
+    def dispatch_task_completed(
+        self, *, task_id: UUID, actor_user_id: UUID, previous_status: str
+    ) -> None:
+        self.dispatched.append((task_id, actor_user_id, previous_status))

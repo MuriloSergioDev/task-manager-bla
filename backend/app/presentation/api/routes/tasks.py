@@ -18,11 +18,16 @@ from app.application.use_cases.tasks.delete_task import DeleteTaskUseCase
 from app.application.use_cases.tasks.get_task import GetTaskUseCase
 from app.application.use_cases.tasks.list_tasks import ListTasksUseCase
 from app.application.use_cases.tasks.update_task import UpdateTaskUseCase
-from app.core.dependencies import get_task_repository, get_user_repository
+from app.core.dependencies import (
+    get_activity_dispatcher,
+    get_task_repository,
+    get_user_repository,
+)
 from app.domain.entities.user import User
 from app.domain.exceptions import AssigneeNotFoundError, TaskAuthorizationError, TaskNotFoundError
 from app.domain.repositories.task_repository import TaskFilters, TaskRepository
 from app.domain.repositories.user_repository import UserRepository
+from app.domain.services.activity_dispatcher import ActivityDispatcher
 from app.presentation.api.dependencies.auth import get_current_user
 from app.presentation.api.dependencies.pagination import PaginationParams, pagination_params
 from app.presentation.api.dependencies.task_filters import task_filters
@@ -136,8 +141,11 @@ async def complete_task(
     task_id: UUID,
     current_user: Annotated[User, Depends(get_current_user)],
     task_repository: Annotated[TaskRepository, Depends(get_task_repository)],
+    activity_dispatcher: Annotated[ActivityDispatcher, Depends(get_activity_dispatcher)],
 ) -> TaskResponse:
-    use_case = CompleteTaskUseCase(task_repository=task_repository)
+    use_case = CompleteTaskUseCase(
+        task_repository=task_repository, activity_dispatcher=activity_dispatcher
+    )
     try:
         task = await use_case.execute(task_id=task_id, current_user=current_user)
     except TaskNotFoundError as exc:

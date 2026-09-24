@@ -13,6 +13,8 @@ dependencies = [
     "pydantic-settings>=2.5",
     "argon2-cffi>=23.1",
     "pyjwt>=2.9",
+    "celery[redis]>=5.4",
+    "slowapi>=0.1.9",
 ]
 
 [project.optional-dependencies]
@@ -49,6 +51,10 @@ exclude = ["alembic/"]
 [[tool.mypy.overrides]]
 module = "alembic.*"
 ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "celery.*"
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
