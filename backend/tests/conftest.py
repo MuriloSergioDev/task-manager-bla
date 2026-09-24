@@ -4,7 +4,7 @@ from collections.abc import AsyncGenerator
 os.environ.setdefault(
     "DATABASE_URL", "postgresql+asyncpg://taskuser:taskpass@localhost:5432/taskdb_test"
 )
-os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-pytest-only")
+os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-pytest-only-32bytes-min")
 
 import pytest
 from httpx import ASGITransport, AsyncClient
