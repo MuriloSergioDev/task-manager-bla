@@ -28,6 +28,9 @@ class FakeUserRepository:
         self.created = user
         return user
 
+    async def list_all(self) -> list[User]:
+        raise NotImplementedError
+
 
 class FakePasswordHasher:
     def hash(self, plain_password: str) -> str:

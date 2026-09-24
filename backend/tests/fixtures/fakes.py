@@ -84,6 +84,9 @@ class FakeUserRepository:
         self._users_by_email[email] = user
         return user
 
+    async def list_all(self) -> list[User]:
+        return sorted(self._users.values(), key=lambda user: user.email)
+
 
 class FakeActivityDispatcher:
     def __init__(self) -> None:

@@ -6,7 +6,7 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from app.core.config import get_settings
 from app.core.rate_limit import limiter
-from app.presentation.api.routes import auth, health, tasks
+from app.presentation.api.routes import auth, health, tasks, users
 
 
 def create_app() -> FastAPI:
@@ -32,6 +32,7 @@ def create_app() -> FastAPI:
     application.include_router(health.router)
     application.include_router(auth.router)
     application.include_router(tasks.router)
+    application.include_router(users.router)
 
     return application
 

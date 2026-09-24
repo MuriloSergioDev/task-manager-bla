@@ -40,6 +40,9 @@ class FakeUserRepository:
     async def create(self, *, email: str, password_hash: str) -> User:
         raise NotImplementedError
 
+    async def list_all(self) -> list[User]:
+        raise NotImplementedError
+
 
 def _credentials(token: str = "token") -> HTTPAuthorizationCredentials:
     return HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)

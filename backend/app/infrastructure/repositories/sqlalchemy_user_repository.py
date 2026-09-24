@@ -28,6 +28,10 @@ class SqlAlchemyUserRepository:
         await self._session.refresh(model)
         return _to_entity(model)
 
+    async def list_all(self) -> list[User]:
+        result = await self._session.execute(select(UserModel).order_by(UserModel.email))
+        return [_to_entity(model) for model in result.scalars().all()]
+
 
 def _to_entity(model: UserModel) -> User:
     return User(

@@ -22,6 +22,9 @@ class FakeUserRepository:
     async def create(self, *, email: str, password_hash: str) -> User:
         raise NotImplementedError
 
+    async def list_all(self) -> list[User]:
+        raise NotImplementedError
+
 
 class FakePasswordHasher:
     def hash(self, plain_password: str) -> str:
