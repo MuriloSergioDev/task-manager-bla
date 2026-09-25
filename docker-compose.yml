@@ -9,6 +9,7 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-taskuser} -d ${POSTGRES_DB:-taskdb}"]
       interval: 5s
@@ -43,10 +44,22 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
 
   celery-worker:
     build: ./backend
-    command: celery -A app.workers.celery_app worker --loglevel=info
+    # Skip entrypoint.sh (which runs migrations) entirely: only `api` runs
+    # them. Alembic doesn't take a lock around creating its own
+    # alembic_version table, so both containers migrating a fresh database
+    # at once is a real race (UniqueViolationError creating that table),
+    # not just redundant work.
+    entrypoint: ["celery"]
+    command: ["-A", "app.workers.celery_app", "worker", "--loglevel=info"]
     env_file:
       - ./backend/.env
     environment:
@@ -61,6 +74,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      api:
+        condition: service_healthy
 
   frontend:
     build: ./frontend
@@ -72,7 +87,8 @@ services:
       - ./frontend:/app
       - /app/node_modules
     depends_on:
-      - api
+      api:
+        condition: service_healthy
 
 volumes:
   pgdata:

@@ -1,5 +1,7 @@
 import asyncio
+import time
 from collections.abc import Generator
+from uuid import uuid4
 
 import pytest
 from sqlalchemy import delete, select
@@ -75,3 +77,26 @@ def test_record_task_completed_activity_writes_activity_log(eager_celery: None) 
         assert log.payload == {"previous_status": "IN_PROGRESS"}
     finally:
         asyncio.run(_cleanup(user_id, task_id))
+
+
+def test_record_task_completed_activity_does_not_retry_a_missing_task(
+    eager_celery: None,
+) -> None:
+    # Discovered via manual end-to-end testing: completing a task and then
+    # immediately deleting it (a legitimate real sequence, not just a test
+    # artifact) races the async activity-log write against the delete. The
+    # resulting foreign-key violation is permanent -- retrying can't make a
+    # deleted row reappear -- so this must fail fast, not burn 3 retries.
+    nonexistent_task_id = str(uuid4())
+    nonexistent_actor_id = str(uuid4())
+
+    started = time.monotonic()
+    record_task_completed_activity.delay(nonexistent_task_id, nonexistent_actor_id, "TODO")
+    elapsed = time.monotonic() - started
+
+    # A real retry attempt sleeps 10s per Celery's default_retry_delay; a
+    # fast return confirms the IntegrityError branch fired instead.
+    assert elapsed < 5
+
+    log = asyncio.run(_fetch_activity_log(nonexistent_task_id))
+    assert log is None

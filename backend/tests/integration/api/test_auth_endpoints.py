@@ -83,6 +83,15 @@ async def test_login_rejects_malformed_body(client: AsyncClient) -> None:
     assert response.status_code == 422
 
 
+async def test_login_rejects_oversized_password(client: AsyncClient) -> None:
+    response = await client.post(
+        "/api/v1/auth/login",
+        json={"email": "someone@example.com", "password": "x" * 129},
+    )
+
+    assert response.status_code == 422
+
+
 async def test_login_rejects_inactive_user(client: AsyncClient, db_session: AsyncSession) -> None:
     hasher = Argon2PasswordHasher()
     user = UserModel(

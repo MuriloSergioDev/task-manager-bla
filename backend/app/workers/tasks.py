@@ -4,6 +4,7 @@ from typing import Any
 from uuid import UUID
 
 from celery.exceptions import MaxRetriesExceededError
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
@@ -41,6 +42,12 @@ def record_task_completed_activity(
 ) -> None:
     try:
         asyncio.run(_record_activity(task_id, actor_user_id, previous_status))
+    except IntegrityError as exc:
+        # A foreign-key violation here means the task (or actor) referenced
+        # no longer exists -- e.g. it was deleted between completion and
+        # this task running. That's permanent, not transient: retrying
+        # can't make a deleted row reappear, so don't burn retries on it.
+        logger.error("Cannot record activity for task %s: %s", task_id, exc)
     except Exception as exc:
         try:
             raise self.retry(exc=exc)

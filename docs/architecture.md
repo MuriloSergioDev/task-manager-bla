@@ -363,9 +363,9 @@ Mapped to `claude.md`'s required coverage list:
 | `celery-worker` | build `./backend` (same image, different command) | `redis`, `postgres` | same DB/Redis vars as `api` | none | `./backend:/app` |
 | `frontend` | build `./frontend` | `api` | `VITE_API_BASE_URL` | 5173:5173 | `./frontend:/app` + anonymous volume for `node_modules` |
 
-**Health-gated startup.** `postgres`/`redis` define `healthcheck` blocks; `api`/`celery-worker` use `depends_on: condition: service_healthy` so the app never races migrations against a not-yet-ready DB.
+**Health-gated startup.** `postgres`/`redis` define `healthcheck` blocks; `api` depends on both being healthy before it starts, and itself exposes a `healthcheck` hitting `/health`.
 
-**Migrations via entrypoint, not manual exec.** `backend/entrypoint.sh` runs `alembic upgrade head` before `exec`-ing the real process (`uvicorn` for `api`, `celery -A app.workers.celery_app worker` for `celery-worker`). `docker compose up --build` alone yields a fully migrated, working stack — no manual `docker compose exec api alembic upgrade head` needed for normal dev flow (documented as an available fallback for one-off migration debugging).
+**Migrations run once, via `api`'s entrypoint only.** `backend/entrypoint.sh` runs `alembic upgrade head` before `exec`-ing `uvicorn`. `celery-worker` does **not** run it too, despite also using the same image: Alembic doesn't take a lock around creating its own `alembic_version` tracking table, so two containers migrating a genuinely fresh database at the same moment race on that first `CREATE TABLE` and one loses with `UniqueViolationError` — discovered by actually tearing the stack down to a fresh volume and bringing it back up, not by inspection. `celery-worker`'s Compose entry overrides the image's entrypoint to invoke `celery` directly, and depends on `api` being **healthy** (not just started) so migrations are guaranteed complete first. `docker compose up --build` alone yields a fully migrated, working stack — no manual `docker compose exec api alembic upgrade head` needed for normal dev flow (documented as an available fallback for one-off migration debugging).
 
 **Secrets.** `.env` (gitignored) feeds real values to Compose via `env_file:`; `.env.example` (repo root and `backend/`) commits only placeholders. No secrets hardcoded in `docker-compose.yml` or Dockerfiles.
 

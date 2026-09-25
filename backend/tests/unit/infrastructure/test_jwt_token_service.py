@@ -1,6 +1,8 @@
 import time
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
+import jwt
 import pytest
 
 from app.core.config import Settings
@@ -51,3 +53,63 @@ def test_decode_rejects_malformed_token() -> None:
 
     with pytest.raises(InvalidTokenError):
         service.decode_access_token("not-a-real-token")
+
+
+def _forge_token(secret: str, payload: dict[str, object]) -> str:
+    return jwt.encode(payload, secret, algorithm="HS256")
+
+
+def test_decode_rejects_token_with_wrong_type_claim() -> None:
+    settings = _settings()
+    now = datetime.now(UTC)
+    # A forged token that passes signature verification but claims to be a
+    # different token type (e.g. a hypothetical future refresh token) --
+    # the type check exists precisely to reject this kind of confusion.
+    token = _forge_token(
+        settings.jwt_secret_key,
+        {
+            "sub": str(uuid4()),
+            "email": "user@example.com",
+            "iat": now,
+            "exp": now + timedelta(minutes=5),
+            "type": "refresh",
+        },
+    )
+
+    with pytest.raises(InvalidTokenError):
+        JwtTokenService(settings).decode_access_token(token)
+
+
+def test_decode_rejects_token_missing_subject() -> None:
+    settings = _settings()
+    now = datetime.now(UTC)
+    token = _forge_token(
+        settings.jwt_secret_key,
+        {
+            "email": "user@example.com",
+            "iat": now,
+            "exp": now + timedelta(minutes=5),
+            "type": "access",
+        },
+    )
+
+    with pytest.raises(InvalidTokenError):
+        JwtTokenService(settings).decode_access_token(token)
+
+
+def test_decode_rejects_token_with_non_uuid_subject() -> None:
+    settings = _settings()
+    now = datetime.now(UTC)
+    token = _forge_token(
+        settings.jwt_secret_key,
+        {
+            "sub": "not-a-uuid",
+            "email": "user@example.com",
+            "iat": now,
+            "exp": now + timedelta(minutes=5),
+            "type": "access",
+        },
+    )
+
+    with pytest.raises(InvalidTokenError):
+        JwtTokenService(settings).decode_access_token(token)

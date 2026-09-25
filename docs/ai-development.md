@@ -98,15 +98,78 @@ Each entry follows: prompt/goal → generated approach → accepted/rejected →
 
 ---
 
-## 6. Security review highlights
+## 6. Final review: a Docker startup race that only a true cold start revealed
+
+**Prompt/goal:** Phase 9's validation pass — run the complete stack from scratch, not just re-use the containers that had been running (and working) across every prior phase.
+
+**Generated approach (Phase 6):** both `api` and `celery-worker` used the same `entrypoint.sh`, which runs `alembic upgrade head` before exec-ing the real process — documented at the time as "harmless... removes ordering assumptions" since Alembic migrations are supposed to be idempotent.
+
+**Why that documented reasoning was wrong:** idempotent refers to the *migrations*, not the bookkeeping Alembic does to track them. Alembic doesn't take a lock around creating its own `alembic_version` table. Every re-use of the stack across Phases 6–8 kept the same Postgres volume (already migrated), so this never ran twice against a truly empty database — until Phase 9 explicitly tore it down (`docker compose down -v`) and brought it back up to validate the from-scratch experience a real new clone would have. Both containers hit the empty database at once and raced on `CREATE TABLE alembic_version`; one lost with `UniqueViolationError`.
+
+**Rejected:** leaving both containers running migrations "for safety" (the original reasoning) once it was clear that reasoning didn't hold.
+
+**Accepted:** only `api` migrates. `celery-worker`'s Compose entry overrides the image's entrypoint to invoke `celery` directly (skipping `entrypoint.sh` entirely) and depends on `api` being **healthy** — via a new healthcheck hitting `/health` — rather than merely started, so migrations are guaranteed complete before the worker starts.
+
+**Validated:** `docker compose down -v` (wipes the volume) → `docker compose up --build` → confirmed via `docker logs` that migrations ran exactly once and every service (api, celery-worker, frontend) started cleanly. Repeated the full smoke-test pass (register/login/CRUD/authorization/filtering/pagination/rate-limiting/Celery) against that genuinely fresh stack rather than assuming the fix generalized from the logs alone. This also surfaced a second, smaller gap: `taskdb_test` (the integration-test database) had been created by hand in an earlier phase and was never scripted — also wiped by `down -v`, also undocumented. Fixed by adding a `postgres-init/01-create-test-db.sh` script (Postgres's own `docker-entrypoint-initdb.d` convention), so a fresh volume creates it automatically.
+
+---
+
+## 7. Error handling, round two: a permanent error retried like a transient one
+
+**Prompt/goal:** Phase 9's live API smoke test — complete a task, then (as owner) delete it, in quick succession, to exercise the authorization + lifecycle paths together.
+
+**What happened:** the async activity-log write for the completion raced against the delete and lost, producing a `ForeignKeyViolationError` (the task no longer existed by the time the worker got to it). The task's error handling (section 4 above) caught this as `Exception` and retried it three times at 10s intervals — 30+ seconds spent, and three rounds of log spam, retrying something that could never succeed, since a deleted row doesn't come back.
+
+**Rejected:** treating every exception in the task as equally retryable, which is what the original `except Exception` did.
+
+**Why:** a foreign-key violation is a permanent condition (the referenced row is gone), not a transient one (a connection blip). Conflating the two means wasting retries — and, at scale, worker capacity — on failures that will never resolve.
+
+**Accepted:** catch `sqlalchemy.exc.IntegrityError` specifically and log-and-return immediately, before the general `except Exception: self.retry(...)` branch that remains for genuinely transient failures.
+
+**Validated:** `tests/integration/workers/test_celery_dispatch.py::test_record_task_completed_activity_does_not_retry_a_missing_task` calls the task directly with a nonexistent task/actor id and asserts it returns in under 5 seconds — a real retry would sleep 10s per Celery's `default_retry_delay`, so a fast return is direct evidence the new branch fired instead of the retry path. Then reproduced the *original* scenario against the live Docker stack (restarted `celery-worker` first to be certain it was running the fixed code, not a process that had been up since before the edit): completed a task via the real HTTP API, deleted it immediately after, and confirmed in `docker logs` that the worker hit the identical `ForeignKeyViolationError`, logged it once, and returned in 0.07s — not the 30+ seconds and three retry log entries the original code would have produced.
+
+---
+
+## 8. UX: a stale token flashing the dashboard before bouncing to login
+
+**Prompt/goal:** Phase 9 review of the frontend's auth handling for edge cases beyond the golden path already verified in Phase 7.
+
+**What was found:** `AuthProvider`'s initial state read `auth_user` from `localStorage` directly, with no check on whether the paired JWT was still valid. A tab left open past token expiry (or reopened after the browser was closed for a while) would render the protected dashboard shell first, only redirecting to `/login` after the first API call came back `401` — a visible flash of a screen that was never actually going to load data.
+
+**Rejected:** leaving it as "the API rejects it anyway" — true for security (no protected data is ever exposed), but the flash is still a real, avoidable UX rough edge, not a security gap.
+
+**Accepted:** decode the stored token's `exp` claim at `AuthProvider` init and treat an expired token as unauthenticated immediately, clearing both the token and the stale user before first render.
+
+**Validated:** a Playwright script seeded `localStorage` with a token whose `exp` was already in the past (plus a stale cached user), navigated to `/dashboard`, and asserted an immediate redirect to `/login` with the token cleared — confirming the fix without needing to wait out a real 30-minute expiry.
+
+---
+
+## 9. API design: the one inconsistent error shape, found by actually triggering it
+
+**Prompt/goal:** Phase 9's live smoke test of rate limiting — not just "does it eventually return 429" (already covered by the automated tests), but actually reading the response body of a live 429.
+
+**What was found:** every other error in this API — `HTTPException`, Pydantic validation failures — returns `{"detail": ...}`. SlowAPI's own default exception handler, wired up back in Phase 6, returns `{"error": "Rate limit exceeded: ..."}` instead. Nobody had actually looked at a live 429 body until this pass; the automated rate-limit tests only ever asserted the status code. Worse, the frontend's `apiClient.ts` error-message extraction only reads `.detail` — a 429 would have silently fallen through to axios's generic "Request failed with status code 429" instead of the actual, more informative message.
+
+**Rejected:** leaving SlowAPI's default handler in place and patching around it in the frontend (e.g., special-casing `.error` there too) — that fixes the symptom in one client while leaving the actual API contract inconsistent for every other consumer (Swagger, a future mobile client, `curl`).
+
+**Accepted:** a small custom handler (`rate_limit_exceeded_handler` in `app/core/rate_limit.py`) that reuses SlowAPI's own header-injection logic but wraps the message in `{"detail": ...}`, matching the rest of the API.
+
+**Validated:** added an integration test asserting the live 429 body has a `detail` key and no `error` key; then, separately, confirmed against the running Docker stack with raw `curl` (not just the test client) that a real rate-limited request now returns the consistent shape.
+
+---
+
+## 10. Security review highlights
 
 - **Password hashing:** Argon2 (`argon2-cffi`), not a rolled-my-own or deprecated scheme.
 - **No password hashes in any response:** enforced by `UserResponse` only ever exposing `id`/`email`/`is_active` — verified by an explicit assertion in `test_register_creates_user` and `test_list_users_returns_all_users_without_password_hash`.
 - **JWT secret validated at startup**, not defaulted — `Settings` has no fallback value for `JWT_SECRET_KEY`; a missing one fails immediately via Pydantic, not on first request.
 - **Assignee existence validated server-side** before assignment (create/update/assign all check the user repository), returning `422` instead of letting a bad UUID hit the database and surface a raw foreign-key-violation `500` with an internal stack trace.
 - **Rate limiting** on login/register (5/min) stricter than the general API default (100/min), specifically to slow credential-stuffing/mass-registration — see the README's "Design Decisions" section for the documented multi-instance limitation of SlowAPI's in-memory store.
+- **Login's password field had no length bound**, found during the Phase 9 review — `RegisterRequest` bounded password length (8–128) from the start, but `LoginRequest` didn't, leaving an unauthenticated endpoint that runs Argon2 (whose cost scales with input size) exposed to arbitrarily large input. Fixed by bounding it too (`max_length=128`); verified with a 129-character password returning `422` before ever reaching the password hasher.
+- **SQL injection:** verified directly, not just asserted — sent `status=TODO'; DROP TABLE tasks; --` as a query parameter against the live API. Rejected at `422` by Pydantic's enum validation before reaching the database (SQLAlchemy's parameterized queries mean this was never actually reachable, but the live check confirms the validation layer that makes it unreachable is actually in front of it).
+- **Error responses never leak internals:** verified a malformed UUID path parameter returns a clean Pydantic `422`, not a stack trace; no route in the app installs a custom exception handler that would echo exception details, and the app never runs with debug mode enabled.
 
-## 7. Performance review highlights
+## 11. Performance review highlights
 
 - **Composite index** `(status, due_date)` added in the *initial* migration (Phase 2), anticipating the combined-filter query Phase 5 would need — avoiding an index added reactively after the query pattern was already live.
 - **Pagination is mandatory**, not optional: `GET /tasks` always returns a bounded page (`page_size` capped at 100, `422` if exceeded), never an unbounded table scan.

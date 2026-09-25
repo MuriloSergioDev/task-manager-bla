@@ -1,10 +1,14 @@
+from dataclasses import replace
 from datetime import date
+from uuid import uuid4
 
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.repositories.task_repository import TaskFilters
 from app.infrastructure.database.models import UserModel
 from app.infrastructure.repositories.sqlalchemy_task_repository import SqlAlchemyTaskRepository
+from tests.fixtures.factories import build_task
 
 
 async def _create_user(session: AsyncSession, email: str) -> UserModel:
@@ -37,8 +41,6 @@ async def test_create_and_get_by_id_round_trip(db_session: AsyncSession) -> None
 async def test_get_by_id_returns_none_when_missing(db_session: AsyncSession) -> None:
     repository = SqlAlchemyTaskRepository(db_session)
 
-    from uuid import uuid4
-
     result = await repository.get_by_id(uuid4())
 
     assert result is None
@@ -66,8 +68,6 @@ async def test_list_paginated_orders_newest_first_and_reports_total(
 
 
 async def test_save_persists_mutable_fields_only(db_session: AsyncSession) -> None:
-    from dataclasses import replace
-
     owner = await _create_user(db_session, "owner3@example.com")
     repository = SqlAlchemyTaskRepository(db_session)
     task = await repository.create(
@@ -79,6 +79,13 @@ async def test_save_persists_mutable_fields_only(db_session: AsyncSession) -> No
 
     assert saved.title == "Renamed"
     assert saved.owner_id == owner.id
+
+
+async def test_save_raises_when_task_no_longer_exists(db_session: AsyncSession) -> None:
+    repository = SqlAlchemyTaskRepository(db_session)
+
+    with pytest.raises(ValueError, match="does not exist"):
+        await repository.save(build_task())
 
 
 async def test_delete_removes_task(db_session: AsyncSession) -> None:

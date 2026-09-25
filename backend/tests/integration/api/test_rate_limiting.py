@@ -13,6 +13,25 @@ async def test_login_returns_429_after_exceeding_the_limit(client: AsyncClient) 
     assert 401 in statuses[:5]
 
 
+async def test_429_response_uses_the_same_error_shape_as_the_rest_of_the_api(
+    client: AsyncClient,
+) -> None:
+    payload = {"email": "ratelimit-shape@example.com", "password": "wrong-password"}
+
+    for _ in range(5):
+        await client.post("/api/v1/auth/login", json=payload)
+    response = await client.post("/api/v1/auth/login", json=payload)
+
+    assert response.status_code == 429
+    body = response.json()
+    # SlowAPI's own default handler uses {"error": ...} -- every other
+    # error response in this API (HTTPException, Pydantic validation) uses
+    # {"detail": ...}, so this asserts the override is actually wired up.
+    assert "detail" in body
+    assert "error" not in body
+    assert "Rate limit exceeded" in body["detail"]
+
+
 async def test_register_returns_429_after_exceeding_the_limit(client: AsyncClient) -> None:
     statuses = []
     for i in range(6):
