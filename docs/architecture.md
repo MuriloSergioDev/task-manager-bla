@@ -237,6 +237,8 @@ ix_activity_logs_task_id ON activity_logs(task_id)
 
 Base path: `/api/v1`. Everything except `/health`, `/auth/register`, and `/auth/login` requires `Authorization: Bearer <token>`.
 
+*Amended during implementation:* authentication moved to an `HttpOnly` cookie (see [§4](#4-authentication-flow)), so protected endpoints require the `access_token` cookie instead of a header. `POST /auth/login` returns `UserResponse` rather than the token, and two endpoints were added: `POST /auth/logout` (204, clears the cookie) and `GET /auth/me` (200 `UserResponse`, 401 without a valid cookie).
+
 | Method | Path | Auth | Request | Response | Status codes |
 |---|---|---|---|---|---|
 | GET | `/health` | none | — | `{status: "ok"}` | 200 |
@@ -279,6 +281,8 @@ Base path: `/api/v1`. Everything except `/health`, `/auth/register`, and `/auth/
 
 Access-token-only, no refresh flow (see [Recorded Decisions](#recorded-decisions) #3): on expiry, the frontend simply redirects to login.
 
+*Amended during implementation:* the token is no longer returned in the body or sent as a header. Login sets it as an `access_token` cookie (`HttpOnly`, `SameSite=Lax`, `Secure` outside `development`), and `get_current_user` reads it with FastAPI's `Cookie(...)`; a missing cookie is `401`, and the other checks are unchanged. Because JavaScript can no longer read the token, the SPA restores its session with `GET /auth/me` and signs out with `POST /auth/logout`, which clears the cookie server-side. Rationale and CSRF reasoning: [ai-development.md §9a](ai-development.md) and the README's Design Decisions.
+
 ---
 
 ## 5. Background Processing Flow
@@ -313,6 +317,8 @@ def record_task_completed_activity(self, task_id: str, actor_user_id: str, previ
 ## 6. Frontend Architecture
 
 **API client (`lib/apiClient.ts`).** Single axios instance, `baseURL` from `VITE_API_BASE_URL`. Request interceptor attaches `Authorization: Bearer <token>` from `authContext`/localStorage. Response interceptor: on `401`, clears auth state and redirects to `/login`; normalizes errors into a typed `ApiError {status, message, details?}`. All feature `*Api.ts` files (`authApi.ts`, `tasksApi.ts`) import this one instance — no duplicated fetch/axios setup anywhere.
+
+*Amended during implementation:* with cookie auth there is no token for the client to attach. The axios instance sets `withCredentials: true` so the browser sends the cookie, and nothing is stored in `localStorage`. The `401` interceptor still redirects to `/login`.
 
 **TanStack Query.**
 - `['tasks', filters]` where `filters` is the normalized `{status, dueDateFrom, dueDateTo, page, pageSize}` object — same shape drives caching and refetch-on-filter-change.

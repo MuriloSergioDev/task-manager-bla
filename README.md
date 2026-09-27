@@ -21,14 +21,14 @@ flowchart TB
     end
 
     Browser -->|serves JS/HTML| Frontend
-    Browser -->|REST + JWT| API
+    Browser -->|"REST + JWT cookie"| API
     API -->|SQLAlchemy async| Postgres
-    API -->|enqueue .delay()| Redis
+    API -->|"enqueue .delay()"| Redis
     Worker -->|consume| Redis
     Worker -->|write activity_logs| Postgres
 ```
 
-**Request flow:** the browser talks directly to the FastAPI `api` service (not through the Vite server) using a bearer JWT obtained from `POST /api/v1/auth/login`. Every protected route resolves the current user through a single `get_current_user` dependency, and authorization (who may edit/delete/complete/assign a task) is centralized in `TaskAuthorizationService` rather than duplicated across route handlers.
+**Request flow:** the browser talks directly to the FastAPI `api` service (not through the Vite server) authenticated by a JWT that `POST /api/v1/auth/login` sets as an `HttpOnly`, `SameSite=Lax` cookie, so frontend JavaScript never sees the token (the SPA calls `GET /api/v1/auth/me` to learn who is signed in). Every protected route resolves the current user through a single `get_current_user` dependency, and authorization (who may edit/delete/complete/assign a task) is centralized in `TaskAuthorizationService` rather than duplicated across route handlers.
 
 **Background flow:** when a task is marked complete, the API commits the status change synchronously, then dispatches `record_task_completed_activity` to Celery. The Celery worker (a separate process, own DB connection) writes an `activity_logs` row recording the event. This is asynchronous because activity logging isn't required for the completion response to succeed — coupling it to the request would add latency and a failure mode to a primary user action for no benefit.
 
@@ -192,7 +192,7 @@ Gate: 80% (configured in `pyproject.toml`); actual coverage is in the high 90s. 
 
 ## API Documentation
 
-Interactive Swagger UI: **http://localhost:8000/docs** (also `/redoc`). Generated from the FastAPI route definitions and Pydantic schemas — always in sync with the actual API, documents auth (bearer JWT), request/response shapes, query parameters, and error responses.
+Interactive Swagger UI: **http://localhost:8000/docs** (also `/redoc`). Generated from the FastAPI route definitions and Pydantic schemas — always in sync with the actual API, documents request/response shapes, query parameters, and error responses. Auth is cookie-based, so there's no "Authorize" button: run `POST /api/v1/auth/login` with "Try it out" (e.g. the [demo credentials](#demo-credentials)) and the browser keeps the cookie for the protected endpoints that follow.
 
 ## Design System
 
