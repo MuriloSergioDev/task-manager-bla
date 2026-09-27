@@ -40,17 +40,24 @@ jobs:
       JWT_SECRET_KEY: ci-only-test-secret-key-not-used-anywhere-else
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      # Python version from backend/.python-version, packages from uv.lock:
+      # --frozen fails the job if the lockfile is out of date.
+      - uses: astral-sh/setup-uv@v10.2.0
         with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: backend/pyproject.toml
-      - run: pip install -e ".[dev]"
-      - run: ruff check .
-      - run: ruff format --check .
-      - run: mypy app
-      - run: alembic upgrade head
-      - run: pytest --cov=app --cov-report=term-missing
+          version: "0.12.19"
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - run: uv sync --extra dev --frozen
+      # The same hooks a developer runs on commit. oxlint is skipped here
+      # because the frontend job runs it.
+      - run: uv run --frozen --project backend pre-commit run --all-files --show-diff-on-failure
+        working-directory: .
+        env:
+          SKIP: oxlint
+          PRE_COMMIT_HOME: ${{ runner.temp }}/pre-commit
+      - run: uv run --frozen mypy app
+      - run: uv run --frozen alembic upgrade head
+      - run: uv run --frozen pytest --cov=app --cov-report=term-missing
 
   frontend:
     name: Frontend (lint, unit tests, strict build, Storybook a11y)

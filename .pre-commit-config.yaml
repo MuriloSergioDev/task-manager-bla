@@ -1,0 +1,33 @@
+# Fast checks on every commit. Setup: `pre-commit install` (pre-commit is in
+# the backend's dev dependencies). CI runs the same tools plus the slower
+# ones: mypy --strict needs the project's installed dependencies, which
+# pre-commit's isolated hook environments don't have, so it stays in CI and
+# /validate.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+      - id: detect-private-key
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.9
+    hooks:
+      # Ruff picks up backend/pyproject.toml for files under backend/.
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: oxlint
+        name: oxlint (frontend)
+        entry: npm --prefix frontend run lint
+        language: system
+        files: ^frontend/.*\.(ts|tsx|js|mjs)$
+        pass_filenames: false
