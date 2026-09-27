@@ -4,7 +4,7 @@
 
 ## Role
 
-Act as a senior software engineer helping me build a production-quality technical interview exercise.
+Act as a senior software engineer helping me build a production-quality full-stack application.
 
 You should prioritize:
 
