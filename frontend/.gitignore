@@ -26,3 +26,9 @@ dist-ssr
 # Storybook
 storybook-static
 *storybook.log
+
+# Playwright
+/test-results/
+/playwright-report/
+/e2e/.auth/
+/e2e/.visual-baseline/
