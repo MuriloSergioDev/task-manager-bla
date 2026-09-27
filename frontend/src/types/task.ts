@@ -40,6 +40,4 @@ export interface TaskFilterValues {
   status?: TaskStatus
   dueDateFrom?: string
   dueDateTo?: string
-  page: number
-  pageSize: number
 }

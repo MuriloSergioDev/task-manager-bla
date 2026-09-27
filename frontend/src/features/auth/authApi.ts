@@ -6,18 +6,21 @@ export interface AuthCredentials {
   password: string
 }
 
-export interface LoginResponse {
-  access_token: string
-  token_type: string
-  expires_in: number
-}
-
-export async function login(payload: AuthCredentials): Promise<LoginResponse> {
-  const { data } = await apiClient.post<LoginResponse>('/api/v1/auth/login', payload)
+export async function login(payload: AuthCredentials): Promise<User> {
+  const { data } = await apiClient.post<User>('/api/v1/auth/login', payload)
   return data
 }
 
 export async function register(payload: AuthCredentials): Promise<User> {
   const { data } = await apiClient.post<User>('/api/v1/auth/register', payload)
+  return data
+}
+
+export async function logout(): Promise<void> {
+  await apiClient.post('/api/v1/auth/logout')
+}
+
+export async function getCurrentUser(): Promise<User> {
+  const { data } = await apiClient.get<User>('/api/v1/auth/me')
   return data
 }

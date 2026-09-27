@@ -1,0 +1,88 @@
+/* Design tokens -- the single source for every visual value in the app.
+   Tailwind v4 turns each variable into utilities (e.g. --color-ink ->
+   bg-ink / text-ink, --text-label -> text-label, --radius-sheet ->
+   rounded-sheet). Components use these utilities, never one-off values like
+   text-[13px]. See docs/design-system.md; Storybook's Foundations page
+   renders these values live. */
+
+@theme {
+  /* Typeface. One family; hierarchy comes from size and weight. */
+  --font-sans: "Schibsted Grotesk", ui-sans-serif, system-ui, sans-serif;
+
+  /* Colour: neutrals. A cool sage "paper" with a green-black ink. */
+  --color-paper: #e9ece6; /* page background */
+  --color-sheet: #fafbf8; /* raised surfaces: list sheet, dialogs, fields */
+  --color-wash: #f1f3ee; /* subtle fills: hovers, previews */
+  --color-line: #d5dad2; /* dividers, quiet borders */
+  --color-line-strong: #b9c0b6; /* control borders */
+  --color-ink: #1c2925; /* primary text, primary action */
+  --color-ink-soft: #33413c; /* labels, primary-action hover */
+  --color-muted: #5e6b66; /* secondary text -- the lightest colour text may use (>= 4.5:1) */
+  --color-faint: #7b8781; /* non-text only: icons, spinners, disabled states (>= 3:1) */
+
+  /* Colour: meaning. Colour is only ever used to say something. */
+  --color-progress: #4450c4; /* in progress, focus */
+  --color-progress-wash: #e6e8f8;
+  --color-done: #2a7352; /* done, success */
+  --color-done-wash: #e1efe6;
+  --color-late: #b83a26; /* overdue, errors, destructive */
+  --color-late-wash: #f8e6e1;
+
+  /* Type scale. Tailwind's own sm/lg/xl/2xl steps are used as-is; these fill
+     the gaps with named roles. A role that always pairs with a line height or
+     tracking carries it, so call sites can't get the pairing wrong. Roles
+     without a line height inherit it from their context. */
+  --text-micro: 0.6875rem; /* 11px: date-stub month band */
+  --text-micro--line-height: 1rem;
+  --text-label: 0.8125rem; /* 13px: field labels, status, hints, small buttons */
+  --text-lead: 0.9375rem; /* 15px: page subtitles */
+  --text-brand: 1.0625rem; /* 17px: wordmark in the header */
+  --text-figure: 1.375rem; /* 22px: date-stub day number */
+  --text-figure--line-height: 1;
+  --text-title: 1.75rem; /* 28px: auth page headings */
+  --text-title--line-height: 1.25;
+  --text-title--letter-spacing: -0.02em;
+  --text-display-sm: 2.25rem; /* 36px: page heading on phones */
+  --text-display-sm--line-height: 1;
+  --text-display-sm--letter-spacing: -0.03em;
+  --text-display: 3rem; /* 48px: page heading from sm up */
+  --text-display--line-height: 1;
+  --text-display--letter-spacing: -0.03em;
+
+  --tracking-heading: -0.02em; /* bold headings set outside the roles above */
+
+  /* Radius, by hierarchy: controls sit inside sheets, segments inside controls. */
+  --radius-segment: 0.3125rem; /* 5px */
+  --radius-control: 0.375rem; /* 6px: buttons, fields, stubs, alerts */
+  --radius-sheet: 0.625rem; /* 10px: list sheet, dialogs, auth card */
+
+  /* Layout widths. */
+  --container-auth: 25rem; /* 400px: sign-in / register column */
+
+  /* Elevation. Surfaces are flat and bordered; only dialogs float. */
+  --shadow-dialog: 0 24px 60px -20px rgb(28 41 37 / 0.35);
+
+  /* Motion: only for things that appear in response to the user. */
+  --animate-modal-fade: modal-fade 150ms ease-out;
+  --animate-modal-in: modal-in 180ms ease-out;
+
+  @keyframes modal-fade {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes modal-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}

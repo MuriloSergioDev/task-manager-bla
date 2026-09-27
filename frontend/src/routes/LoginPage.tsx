@@ -1,5 +1,7 @@
 import { useLocation } from 'react-router-dom'
 
+import { AuthLayout } from '../components/layout/AuthLayout'
+import { Alert } from '../components/ui'
 import { LoginForm } from '../features/auth/components/LoginForm'
 
 export function LoginPage() {
@@ -7,16 +9,13 @@ export function LoginPage() {
   const justRegistered = Boolean((location.state as { justRegistered?: boolean } | null)?.justRegistered)
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-sm space-y-6 rounded-lg bg-white p-8 shadow">
-        <h1 className="text-center text-2xl font-semibold text-gray-900">Sign in</h1>
-        {justRegistered && (
-          <p className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-700">
-            Account created. Sign in below.
-          </p>
-        )}
-        <LoginForm />
-      </div>
-    </div>
+    <AuthLayout title="Sign in" subtitle="See what's due and what's assigned to you.">
+      {justRegistered && (
+        <Alert tone="success" className="mb-5">
+          Account created. Sign in with your new password.
+        </Alert>
+      )}
+      <LoginForm />
+    </AuthLayout>
   )
 }

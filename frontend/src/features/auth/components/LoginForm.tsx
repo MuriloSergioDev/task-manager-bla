@@ -1,8 +1,7 @@
 import { useForm } from 'react-hook-form'
 import { Link } from 'react-router-dom'
 
-import { Button } from '../../../components/ui/Button'
-import { Input } from '../../../components/ui/Input'
+import { Alert, Button, Input } from '../../../components/ui'
 import { useLogin } from '../hooks/useLogin'
 
 interface LoginFormValues {
@@ -23,7 +22,7 @@ export function LoginForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
       <Input
         label="Email"
         type="email"
@@ -43,19 +42,17 @@ export function LoginForm() {
       />
 
       {loginMutation.error && (
-        <p className="text-sm text-red-600" role="alert">
-          {loginMutation.error.message}
-        </p>
+        <Alert tone="error">{loginMutation.error.message}</Alert>
       )}
 
       <Button type="submit" disabled={loginMutation.isPending} className="w-full">
         {loginMutation.isPending ? 'Signing in…' : 'Sign in'}
       </Button>
 
-      <p className="text-center text-sm text-gray-600">
+      <p className="pt-1 text-sm text-muted">
         Don&apos;t have an account?{' '}
-        <Link to="/register" className="font-medium text-blue-600 hover:underline">
-          Register
+        <Link to="/register" className="font-semibold text-ink underline decoration-line-strong underline-offset-4 hover:decoration-ink">
+          Create an account
         </Link>
       </p>
     </form>

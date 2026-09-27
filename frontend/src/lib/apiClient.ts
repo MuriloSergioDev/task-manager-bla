@@ -1,25 +1,18 @@
 import axios, { type AxiosError } from 'axios'
 
 import type { ApiError } from '../types/api'
-import { clearToken, getToken } from './tokenStorage'
 
 export const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000',
-})
-
-apiClient.interceptors.request.use((config) => {
-  const token = getToken()
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
-  }
-  return config
+  // The access token lives in an httpOnly cookie set by the API, so the
+  // browser -- not this client -- attaches it; it just needs to be sent.
+  withCredentials: true,
 })
 
 apiClient.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
     if (error.response?.status === 401 && window.location.pathname !== '/login') {
-      clearToken()
       window.location.href = '/login'
     }
 

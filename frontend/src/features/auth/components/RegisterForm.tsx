@@ -1,8 +1,7 @@
 import { useForm } from 'react-hook-form'
 import { Link } from 'react-router-dom'
 
-import { Button } from '../../../components/ui/Button'
-import { Input } from '../../../components/ui/Input'
+import { Alert, Button, Input } from '../../../components/ui'
 import { useRegister } from '../hooks/useRegister'
 
 interface RegisterFormValues {
@@ -25,7 +24,7 @@ export function RegisterForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
       <Input
         label="Email"
         type="email"
@@ -58,18 +57,16 @@ export function RegisterForm() {
       />
 
       {registerMutation.error && (
-        <p className="text-sm text-red-600" role="alert">
-          {registerMutation.error.message}
-        </p>
+        <Alert tone="error">{registerMutation.error.message}</Alert>
       )}
 
       <Button type="submit" disabled={registerMutation.isPending} className="w-full">
         {registerMutation.isPending ? 'Creating account…' : 'Create account'}
       </Button>
 
-      <p className="text-center text-sm text-gray-600">
+      <p className="pt-1 text-sm text-muted">
         Already have an account?{' '}
-        <Link to="/login" className="font-medium text-blue-600 hover:underline">
+        <Link to="/login" className="font-semibold text-ink underline decoration-line-strong underline-offset-4 hover:decoration-ink">
           Sign in
         </Link>
       </p>

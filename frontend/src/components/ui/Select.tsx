@@ -1,36 +1,41 @@
 import { forwardRef, type ReactNode, type SelectHTMLAttributes } from 'react'
 
+import { FIELD_ERROR, FIELD_LABEL, fieldControl } from './fieldStyles'
+
 interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
+  /** Visible label. Pass `""` inside rows and give an `aria-label` instead. */
   label: string
+  /** Validation message; marks the field invalid and is announced. */
   error?: string
+  /** Smaller control for use inside dense rows rather than forms. */
+  compact?: boolean
   children: ReactNode
 }
 
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select(
-  { label, error, id, className = '', children, ...props },
+  { label, error, compact = false, id, className = '', children, ...props },
   ref,
 ) {
   const selectId = id ?? props.name
 
   return (
-    <div className="space-y-1">
+    <div className="space-y-1.5">
       {label && (
-        <label htmlFor={selectId} className="block text-sm font-medium text-gray-700">
+        <label htmlFor={selectId} className={FIELD_LABEL}>
           {label}
         </label>
       )}
       <select
         ref={ref}
         id={selectId}
-        className={`block w-full rounded-md border px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-          error ? 'border-red-500' : 'border-gray-300'
-        } ${className}`}
+        aria-invalid={error ? true : undefined}
+        className={`${fieldControl(Boolean(error), compact)} pr-8 ${className}`}
         {...props}
       >
         {children}
       </select>
       {error && (
-        <p className="text-sm text-red-600" role="alert">
+        <p className={FIELD_ERROR} role="alert">
           {error}
         </p>
       )}

@@ -1,0 +1,78 @@
+import { Meta, Unstyled } from '@storybook/addon-docs/blocks'
+
+import { ColorPalette, RadiusScale, TokenTable, TypeScale } from './foundations'
+
+<Meta title="Foundations" />
+
+# Foundations
+
+Every visual value in the app comes from one file, `src/styles/tokens.css`.
+Tailwind v4 turns each token into utilities: `--color-ink` becomes `bg-ink`,
+`text-ink` and `border-ink`; `--text-label` becomes `text-label`;
+`--radius-sheet` becomes `rounded-sheet`. Components use those utilities and
+never one-off values like `text-[13px]`.
+
+Everything below is read from `tokens.css` itself, comments included, so this
+page updates whenever a token changes.
+
+## Principles
+
+- **Colour means something.** Neutrals carry the layout. The three accents
+  each have one job: **indigo** for in progress and keyboard focus, **green**
+  for done and success, **brick** for overdue, errors and destructive actions.
+  If a colour doesn't say one of those things, it should be a neutral.
+- **The primary action is ink, not a brand colour**, so accents stay free to
+  carry meaning.
+- **Surfaces are flat and bordered.** Only dialogs have a shadow, because
+  they're the only thing that floats above the page.
+- **Radius follows hierarchy:** segments sit inside controls, and controls
+  sit inside sheets, so the radius grows outwards.
+- **One typeface** (Schibsted Grotesk). Hierarchy comes from size and weight,
+  and dates use tabular figures so they line up.
+- **Text meets WCAG AA.** Every text colour reaches 4.5:1 on every surface;
+  `muted` is the lightest colour text may use. `faint` is for non-text
+  only (icons, spinners, disabled states) and reaches 3:1. Storybook's
+  accessibility panel (axe) checks this on every story.
+- **Motion only answers the user.** Dialogs fade in when opened; nothing
+  animates on its own. Everything respects `prefers-reduced-motion`.
+
+## Colour
+
+<Unstyled>
+  <ColorPalette />
+</Unstyled>
+
+## Type
+
+Tailwind's own `text-sm`, `text-lg`, `text-xl` and `text-2xl` are used as they
+are. The named roles below fill the gaps; a role that always goes with a line
+height or tracking includes it.
+
+<Unstyled>
+  <TypeScale />
+</Unstyled>
+
+## Radius
+
+<Unstyled>
+  <RadiusScale />
+</Unstyled>
+
+## Tracking, widths, elevation and motion
+
+<Unstyled>
+  <TokenTable prefix="--tracking-" />
+  <TokenTable prefix="--container-" />
+  <TokenTable prefix="--shadow-" />
+  <TokenTable prefix="--animate-" />
+</Unstyled>
+
+## Allowed exceptions
+
+A handful of arbitrary values are layout or selector syntax, not design
+values, so they stay inline with a comment:
+
+- `max-h-[92dvh]` on the dialog panel: a viewport constraint.
+- The task row's `grid-cols-[…]` template in `taskListLayout.ts`: column
+  tracks, not a reusable measure.
+- `has-[:focus-visible]` on filter segments: a selector variant.

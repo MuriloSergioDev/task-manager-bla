@@ -1,67 +1,53 @@
-import { createContext, type ReactNode, useContext, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { createContext, type ReactNode, useContext } from 'react'
 
-import { decodeJwt } from '../../lib/jwt'
-import { clearToken, getToken, setToken as persistToken } from '../../lib/tokenStorage'
 import type { User } from '../../types/user'
+import { getCurrentUser, logout as logoutRequest } from './authApi'
 
-const USER_STORAGE_KEY = 'auth_user'
+const CURRENT_USER_QUERY_KEY = ['auth', 'me'] as const
 
 interface AuthContextValue {
   user: User | null
   isAuthenticated: boolean
-  login: (token: string, user: User) => void
+  isLoading: boolean
+  login: (user: User) => void
   logout: () => void
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
 
-function isTokenExpired(token: string): boolean {
-  try {
-    return decodeJwt(token).exp * 1000 <= Date.now()
-  } catch {
-    return true
-  }
-}
-
-// Checked at load so a stale token from a previous session (or one that
-// simply expired while the tab was closed) never renders the dashboard
-// shell before the first API call fails and bounces back to /login -- an
-// avoidable flash rather than a security issue (the API rejects it either
-// way), but easy to just not have.
-function readStoredUser(): User | null {
-  const token = getToken()
-  if (!token || isTokenExpired(token)) {
-    clearToken()
-    localStorage.removeItem(USER_STORAGE_KEY)
-    return null
-  }
-
-  const stored = localStorage.getItem(USER_STORAGE_KEY)
-  if (!stored) return null
-  try {
-    return JSON.parse(stored) as User
-  } catch {
-    return null
-  }
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(readStoredUser)
+  const queryClient = useQueryClient()
 
-  const login = (token: string, nextUser: User) => {
-    persistToken(token)
-    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(nextUser))
-    setUser(nextUser)
+  // The access token is an httpOnly cookie the browser controls, so the app
+  // has no client-readable signal of "am I logged in" -- session state has
+  // to be asked of the API, once, on load.
+  const { data: user, isLoading } = useQuery({
+    queryKey: CURRENT_USER_QUERY_KEY,
+    queryFn: getCurrentUser,
+    retry: false,
+    staleTime: Infinity,
+  })
+
+  const login = (nextUser: User) => {
+    queryClient.setQueryData(CURRENT_USER_QUERY_KEY, nextUser)
   }
 
   const logout = () => {
-    clearToken()
-    localStorage.removeItem(USER_STORAGE_KEY)
-    setUser(null)
+    queryClient.setQueryData(CURRENT_USER_QUERY_KEY, null)
+    void logoutRequest()
   }
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated: user !== null, login, logout }}>
+    <AuthContext.Provider
+      value={{
+        user: user ?? null,
+        isAuthenticated: user != null,
+        isLoading,
+        login,
+        logout,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   )

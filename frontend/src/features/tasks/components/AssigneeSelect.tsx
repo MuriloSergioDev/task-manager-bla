@@ -1,4 +1,4 @@
-import { Select } from '../../../components/ui/Select'
+import { Select } from '../../../components/ui'
 import { useUsers } from '../hooks/useUsers'
 
 interface AssigneeSelectProps {
@@ -6,15 +6,30 @@ interface AssigneeSelectProps {
   onChange: (value: string) => void
   label?: string
   error?: string
+  /** Needed when several selects render on one page (one per list row) --
+   *  otherwise they'd all fall back to the same `name`-derived DOM id. */
+  id?: string
+  ariaLabel?: string
+  compact?: boolean
 }
 
-export function AssigneeSelect({ value, onChange, label = 'Assignee', error }: AssigneeSelectProps) {
+export function AssigneeSelect({
+  value,
+  onChange,
+  label = 'Assignee',
+  error,
+  id,
+  ariaLabel,
+  compact = false,
+}: AssigneeSelectProps) {
   const { data: users, isLoading } = useUsers()
 
   return (
     <Select
       label={label}
-      aria-label={label || 'Assignee'}
+      aria-label={ariaLabel ?? (label || 'Assignee')}
+      id={id}
+      compact={compact}
       name="assigned_to"
       value={value}
       onChange={(event) => onChange(event.target.value)}
