@@ -79,6 +79,10 @@ Run the whole validation pass with the `/validate` skill.
 - **The frontend container uses a Windows bind mount**, so Vite polls for
   changes, and the container has its own `node_modules` volume. If you add a
   dependency the app imports at runtime, install it in the container as well.
+- **On Linux, install frontend dependencies before the first `docker compose up`.**
+  Otherwise Docker creates `frontend/node_modules` as root (it's the mount point for
+  the container's `node_modules` volume), and `npm install` on the host fails with
+  `EACCES`. CI orders its e2e steps this way for the same reason.
 - **The dev database is not in its seeded state.** Tests must not assume
   specific tasks exist; assert on what the API returns.
 - **A green run isn't proof that a UI change worked.** Verify in a browser

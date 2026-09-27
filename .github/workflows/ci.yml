@@ -78,6 +78,19 @@ jobs:
     needs: [backend, frontend]
     steps:
       - uses: actions/checkout@v5
+      # Install the test tooling before the stack starts: Compose's anonymous
+      # /app/node_modules volume needs a mount point, and if frontend/node_modules
+      # doesn't exist yet Docker creates it on the host as root, which then
+      # makes `npm ci` fail with EACCES.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+        working-directory: frontend
+      - run: npx playwright install --with-deps chromium
+        working-directory: frontend
       # The same setup steps the README gives a new developer.
       - run: |
           cp .env.example .env
@@ -93,15 +106,6 @@ jobs:
           done
           docker compose logs frontend
           exit 1
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-      - run: npm ci
-        working-directory: frontend
-      - run: npx playwright install --with-deps chromium
-        working-directory: frontend
       - run: npm run test:e2e
         working-directory: frontend
       - name: Stack logs on failure

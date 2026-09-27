@@ -185,7 +185,7 @@ Integration tests run against a **real** Postgres database (the schema uses nati
 
 `taskdb_test` is created automatically the first time `postgres`'s volume initializes (via `postgres-init/01-create-test-db.sh`), so `docker compose up` alone is enough. Running Postgres outside Docker instead? Create it yourself: `createdb -U <user> taskdb_test`, then `DATABASE_URL=postgresql+asyncpg://.../taskdb_test alembic upgrade head` to migrate it.
 
-Frontend (from `frontend/`; install the browser once with `npx playwright install chromium`):
+Frontend (from `frontend/`; run `npm install` and `npx playwright install chromium` once). On Linux, run `npm install` **before** the first `docker compose up`. Otherwise Docker creates `frontend/node_modules` as root (it's the mount point for the container's own `node_modules` volume), and a later `npm install` on the host fails with `EACCES`.
 
 ```bash
 npm run lint                        # oxlint, fails on warnings
