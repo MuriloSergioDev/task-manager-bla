@@ -15,24 +15,24 @@ def test_owner_can_view_edit_delete_assign_and_complete() -> None:
     assert TaskAuthorizationService.can_complete(owner, task) is True
 
 
-def test_assignee_can_view_and_complete_but_not_edit_delete_or_assign() -> None:
+def test_assignee_can_view_edit_delete_and_complete_but_not_reassign() -> None:
     owner = build_user()
     assignee = build_user()
     task = build_task(owner_id=owner.id, assigned_to=assignee.id)
 
     assert TaskAuthorizationService.can_view(assignee, task) is True
     assert TaskAuthorizationService.can_complete(assignee, task) is True
-    assert TaskAuthorizationService.can_edit(assignee, task) is False
-    assert TaskAuthorizationService.can_delete(assignee, task) is False
+    assert TaskAuthorizationService.can_edit(assignee, task) is True
+    assert TaskAuthorizationService.can_delete(assignee, task) is True
     assert TaskAuthorizationService.can_assign(assignee, task) is False
 
 
-def test_unrelated_user_can_view_but_cannot_do_anything_else() -> None:
+def test_unrelated_user_cannot_view_or_do_anything_else() -> None:
     owner = build_user()
     stranger = build_user()
     task = build_task(owner_id=owner.id, assigned_to=None)
 
-    assert TaskAuthorizationService.can_view(stranger, task) is True
+    assert TaskAuthorizationService.can_view(stranger, task) is False
     assert TaskAuthorizationService.can_edit(stranger, task) is False
     assert TaskAuthorizationService.can_delete(stranger, task) is False
     assert TaskAuthorizationService.can_assign(stranger, task) is False

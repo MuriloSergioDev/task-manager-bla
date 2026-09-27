@@ -66,3 +66,16 @@ async def test_assign_raises_when_task_missing() -> None:
 
     with pytest.raises(TaskNotFoundError):
         await use_case.execute(task_id=build_task().id, current_user=build_user(), assigned_to=None)
+
+
+async def test_stranger_assigning_task_gets_not_found() -> None:
+    owner = build_user()
+    stranger = build_user()
+    task = build_task(owner_id=owner.id)
+    use_case = AssignTaskUseCase(
+        task_repository=FakeTaskRepository(tasks=[task]),
+        user_repository=FakeUserRepository(users=[stranger]),
+    )
+
+    with pytest.raises(TaskNotFoundError):
+        await use_case.execute(task_id=task.id, current_user=stranger, assigned_to=stranger.id)

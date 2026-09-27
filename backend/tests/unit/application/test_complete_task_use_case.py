@@ -2,7 +2,7 @@ import pytest
 
 from app.application.use_cases.tasks.complete_task import CompleteTaskUseCase
 from app.domain.entities.task import TaskStatus
-from app.domain.exceptions import TaskAuthorizationError, TaskNotFoundError
+from app.domain.exceptions import TaskNotFoundError
 from tests.fixtures.factories import build_task, build_user
 from tests.fixtures.fakes import FakeActivityDispatcher, FakeTaskRepository
 
@@ -48,7 +48,7 @@ async def test_assignee_can_complete_task() -> None:
     assert completed.status == TaskStatus.COMPLETED
 
 
-async def test_stranger_cannot_complete_task() -> None:
+async def test_stranger_completing_task_gets_not_found() -> None:
     owner = build_user()
     stranger = build_user()
     task = build_task(owner_id=owner.id)
@@ -57,7 +57,7 @@ async def test_stranger_cannot_complete_task() -> None:
         task_repository=FakeTaskRepository(tasks=[task]), activity_dispatcher=dispatcher
     )
 
-    with pytest.raises(TaskAuthorizationError):
+    with pytest.raises(TaskNotFoundError):
         await use_case.execute(task_id=task.id, current_user=stranger)
 
     assert dispatcher.dispatched == []

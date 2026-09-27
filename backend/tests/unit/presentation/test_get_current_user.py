@@ -2,7 +2,6 @@ from uuid import UUID, uuid4
 
 import pytest
 from fastapi import HTTPException
-from fastapi.security import HTTPAuthorizationCredentials
 
 from app.domain.entities.user import User
 from app.domain.services.token_service import InvalidTokenError
@@ -44,16 +43,12 @@ class FakeUserRepository:
         raise NotImplementedError
 
 
-def _credentials(token: str = "token") -> HTTPAuthorizationCredentials:
-    return HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
-
-
-async def test_get_current_user_rejects_missing_credentials() -> None:
+async def test_get_current_user_rejects_missing_cookie() -> None:
     with pytest.raises(HTTPException) as exc_info:
         await get_current_user(
-            credentials=None,
             token_service=FakeTokenService(),
             user_repository=FakeUserRepository(),
+            access_token=None,
         )
 
     assert exc_info.value.status_code == 401
@@ -62,9 +57,9 @@ async def test_get_current_user_rejects_missing_credentials() -> None:
 async def test_get_current_user_rejects_invalid_token() -> None:
     with pytest.raises(HTTPException) as exc_info:
         await get_current_user(
-            credentials=_credentials(),
             token_service=FakeTokenService(error=InvalidTokenError("bad token")),
             user_repository=FakeUserRepository(),
+            access_token="token",
         )
 
     assert exc_info.value.status_code == 401
@@ -75,9 +70,9 @@ async def test_get_current_user_rejects_inactive_user() -> None:
 
     with pytest.raises(HTTPException) as exc_info:
         await get_current_user(
-            credentials=_credentials(),
             token_service=FakeTokenService(user_id=user.id),
             user_repository=FakeUserRepository(user=user),
+            access_token="token",
         )
 
     assert exc_info.value.status_code == 401
@@ -86,9 +81,9 @@ async def test_get_current_user_rejects_inactive_user() -> None:
 async def test_get_current_user_rejects_unknown_user() -> None:
     with pytest.raises(HTTPException) as exc_info:
         await get_current_user(
-            credentials=_credentials(),
             token_service=FakeTokenService(user_id=uuid4()),
             user_repository=FakeUserRepository(user=None),
+            access_token="token",
         )
 
     assert exc_info.value.status_code == 401
@@ -98,9 +93,9 @@ async def test_get_current_user_returns_active_user() -> None:
     user = build_user(is_active=True)
 
     result = await get_current_user(
-        credentials=_credentials(),
         token_service=FakeTokenService(user_id=user.id),
         user_repository=FakeUserRepository(user=user),
+        access_token="token",
     )
 
     assert result == user

@@ -12,9 +12,3 @@ class LoginRequest(BaseModel):
     # Argon2's hashing cost scales with input size, and this is the one
     # password field an unauthenticated caller can hit repeatedly.
     password: str = Field(min_length=1, max_length=128)
-
-
-class TokenResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-    expires_in: int

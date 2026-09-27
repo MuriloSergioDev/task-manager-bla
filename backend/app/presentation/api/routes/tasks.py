@@ -44,7 +44,10 @@ async def list_tasks(
 ) -> TaskListResponse:
     use_case = ListTasksUseCase(task_repository=task_repository)
     items, total = await use_case.execute(
-        page=pagination.page, page_size=pagination.page_size, filters=filters
+        current_user=current_user,
+        page=pagination.page,
+        page_size=pagination.page_size,
+        filters=filters,
     )
     pages = ceil(total / pagination.page_size) if total else 0
     return TaskListResponse(
@@ -89,7 +92,7 @@ async def get_task(
 ) -> TaskResponse:
     use_case = GetTaskUseCase(task_repository=task_repository)
     try:
-        task = await use_case.execute(task_id)
+        task = await use_case.execute(task_id=task_id, current_user=current_user)
     except TaskNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found") from exc
 

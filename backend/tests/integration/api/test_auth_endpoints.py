@@ -50,9 +50,14 @@ async def test_login_succeeds_with_correct_credentials(client: AsyncClient) -> N
 
     assert response.status_code == 200
     body = response.json()
-    assert body["token_type"] == "bearer"
-    assert isinstance(body["access_token"], str) and body["access_token"]
-    assert body["expires_in"] > 0
+    assert body["email"] == "login-user@example.com"
+    assert "password_hash" not in body
+
+    access_token_cookie = response.cookies.get("access_token")
+    assert access_token_cookie
+    set_cookie_header = response.headers.get("set-cookie", "")
+    assert "HttpOnly" in set_cookie_header
+    assert "SameSite=lax" in set_cookie_header
 
 
 async def test_login_rejects_wrong_password(client: AsyncClient) -> None:
@@ -106,5 +111,47 @@ async def test_login_rejects_inactive_user(client: AsyncClient, db_session: Asyn
         "/api/v1/auth/login",
         json={"email": "inactive@example.com", "password": "s3cretpass"},
     )
+
+    assert response.status_code == 401
+
+
+async def test_me_requires_authentication(client: AsyncClient) -> None:
+    response = await client.get("/api/v1/auth/me")
+
+    assert response.status_code == 401
+
+
+async def test_me_returns_current_user(client: AsyncClient) -> None:
+    await client.post(
+        "/api/v1/auth/register",
+        json={"email": "me-user@example.com", "password": "s3cretpass"},
+    )
+    await client.post(
+        "/api/v1/auth/login",
+        json={"email": "me-user@example.com", "password": "s3cretpass"},
+    )
+
+    response = await client.get("/api/v1/auth/me")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["email"] == "me-user@example.com"
+    assert "password_hash" not in body
+
+
+async def test_logout_clears_session(client: AsyncClient) -> None:
+    await client.post(
+        "/api/v1/auth/register",
+        json={"email": "logout-user@example.com", "password": "s3cretpass"},
+    )
+    await client.post(
+        "/api/v1/auth/login",
+        json={"email": "logout-user@example.com", "password": "s3cretpass"},
+    )
+
+    logout_response = await client.post("/api/v1/auth/logout")
+    assert logout_response.status_code == 204
+
+    response = await client.get("/api/v1/auth/me")
 
     assert response.status_code == 401

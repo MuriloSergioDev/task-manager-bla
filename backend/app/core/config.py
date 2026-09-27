@@ -28,6 +28,13 @@ class Settings(BaseSettings):
     def cors_origins(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins_raw.split(",") if origin.strip()]
 
+    @property
+    def cookie_secure(self) -> bool:
+        # The `Secure` flag makes browsers refuse to send the cookie over plain
+        # HTTP, which is exactly what local dev (http://localhost) is. Any other
+        # environment is assumed to be served over HTTPS and gets the flag.
+        return self.environment != "development"
+
 
 @lru_cache
 def get_settings() -> Settings:

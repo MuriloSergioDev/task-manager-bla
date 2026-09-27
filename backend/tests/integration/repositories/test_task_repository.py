@@ -131,3 +131,31 @@ async def test_deleting_assignee_unassigns_but_keeps_task(db_session: AsyncSessi
     result = await repository.get_by_id(task.id)
     assert result is not None
     assert result.assigned_to is None
+
+
+async def test_list_paginated_visible_to_matches_owner_or_assignee(
+    db_session: AsyncSession,
+) -> None:
+    me = await _create_user(db_session, "visible-me@example.com")
+    other = await _create_user(db_session, "visible-other@example.com")
+    repository = SqlAlchemyTaskRepository(db_session)
+    owned = await repository.create(
+        title="Mine", description=None, due_date=None, owner_id=me.id, assigned_to=None
+    )
+    assigned = await repository.create(
+        title="Assigned to me",
+        description=None,
+        due_date=None,
+        owner_id=other.id,
+        assigned_to=me.id,
+    )
+    await repository.create(
+        title="Not mine", description=None, due_date=None, owner_id=other.id, assigned_to=None
+    )
+
+    items, total = await repository.list_paginated(
+        page=1, page_size=20, filters=TaskFilters(visible_to=me.id)
+    )
+
+    assert total == 2
+    assert {task.id for task in items} == {owned.id, assigned.id}

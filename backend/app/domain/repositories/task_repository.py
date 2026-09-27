@@ -12,6 +12,9 @@ class TaskFilters:
     due_date: date | None = None
     due_date_from: date | None = None
     due_date_to: date | None = None
+    # Restricts results to tasks this user owns or is assigned to. Set by
+    # ListTasksUseCase, never from request input.
+    visible_to: UUID | None = None
 
 
 class TaskRepository(Protocol):

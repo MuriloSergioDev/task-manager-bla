@@ -53,6 +53,11 @@ class FakeTaskRepository:
 
 
 def _matches(task: Task, filters: TaskFilters) -> bool:
+    if filters.visible_to is not None and filters.visible_to not in (
+        task.owner_id,
+        task.assigned_to,
+    ):
+        return False
     if filters.status is not None and task.status != filters.status:
         return False
     if filters.due_date is not None and task.due_date != filters.due_date:

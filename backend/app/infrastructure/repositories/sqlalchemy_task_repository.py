@@ -1,7 +1,7 @@
 from datetime import date
 from uuid import UUID
 
-from sqlalchemy import ColumnElement, func, select
+from sqlalchemy import ColumnElement, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.entities.task import Task
@@ -83,6 +83,13 @@ class SqlAlchemyTaskRepository:
 
 def _build_filter_conditions(filters: TaskFilters) -> list[ColumnElement[bool]]:
     conditions: list[ColumnElement[bool]] = []
+    if filters.visible_to is not None:
+        conditions.append(
+            or_(
+                TaskModel.owner_id == filters.visible_to,
+                TaskModel.assigned_to == filters.visible_to,
+            )
+        )
     if filters.status is not None:
         conditions.append(TaskModel.status == filters.status)
     if filters.due_date is not None:

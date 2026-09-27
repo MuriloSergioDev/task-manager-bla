@@ -56,10 +56,11 @@ async def test_login_succeeds_with_correct_credentials() -> None:
         token_service=token_service,
     )
 
-    token, expires_in = await use_case.execute(
+    authenticated_user, token, expires_in = await use_case.execute(
         email="user@example.com", password="correct-password"
     )
 
+    assert authenticated_user == user
     assert token == "fake-token"
     assert expires_in == 1800
     assert token_service.issued_for == (user.id, user.email)

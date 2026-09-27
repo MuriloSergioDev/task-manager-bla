@@ -59,6 +59,14 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+filterwarnings = [
+    # httpx deprecated the per-request `cookies=` kwarg in favor of setting
+    # cookies on the client instance. Our integration tests rely on it to act
+    # as multiple identities (owner/assignee/stranger) against a single
+    # ASGI-backed AsyncClient within one test -- the client-level cookie jar
+    # has no equivalent one-shot per-request override.
+    "ignore:Setting per-request cookies=<...> is being deprecated:DeprecationWarning",
+]
 
 [tool.coverage.run]
 source = ["app"]

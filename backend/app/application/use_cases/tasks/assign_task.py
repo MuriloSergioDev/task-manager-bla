@@ -1,9 +1,10 @@
 from dataclasses import dataclass, replace
 from uuid import UUID
 
+from app.application.use_cases.tasks.task_lookup import get_visible_task
 from app.domain.entities.task import Task
 from app.domain.entities.user import User
-from app.domain.exceptions import AssigneeNotFoundError, TaskAuthorizationError, TaskNotFoundError
+from app.domain.exceptions import AssigneeNotFoundError, TaskAuthorizationError
 from app.domain.repositories.task_repository import TaskRepository
 from app.domain.repositories.user_repository import UserRepository
 from app.domain.services.authorization_service import TaskAuthorizationService
@@ -15,9 +16,7 @@ class AssignTaskUseCase:
     user_repository: UserRepository
 
     async def execute(self, *, task_id: UUID, current_user: User, assigned_to: UUID | None) -> Task:
-        task = await self.task_repository.get_by_id(task_id)
-        if task is None:
-            raise TaskNotFoundError(str(task_id))
+        task = await get_visible_task(self.task_repository, task_id, current_user)
 
         if not TaskAuthorizationService.can_assign(current_user, task):
             raise TaskAuthorizationError("Only the task owner can reassign this task")

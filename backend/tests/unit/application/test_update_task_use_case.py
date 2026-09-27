@@ -20,7 +20,7 @@ async def test_owner_can_update_title() -> None:
     assert updated.title == "New title"
 
 
-async def test_non_owner_cannot_update_task() -> None:
+async def test_stranger_updating_task_gets_not_found() -> None:
     owner = build_user()
     stranger = build_user()
     task = build_task(owner_id=owner.id)
@@ -28,7 +28,7 @@ async def test_non_owner_cannot_update_task() -> None:
         task_repository=FakeTaskRepository(tasks=[task]), user_repository=FakeUserRepository()
     )
 
-    with pytest.raises(TaskAuthorizationError):
+    with pytest.raises(TaskNotFoundError):
         await use_case.execute(
             task_id=task.id, current_user=stranger, updates={"title": "Hijacked"}
         )
@@ -73,3 +73,21 @@ async def test_update_allows_clearing_assignee_to_none() -> None:
     )
 
     assert updated.assigned_to is None
+
+
+async def test_assignee_cannot_reassign_via_update() -> None:
+    owner = build_user()
+    assignee = build_user()
+    other_user = build_user()
+    task = build_task(owner_id=owner.id, assigned_to=assignee.id)
+    use_case = UpdateTaskUseCase(
+        task_repository=FakeTaskRepository(tasks=[task]),
+        user_repository=FakeUserRepository(users=[other_user]),
+    )
+
+    # The assignee can see the task, so this is a real permission failure
+    # (403), unlike a stranger who gets TaskNotFoundError (404).
+    with pytest.raises(TaskAuthorizationError):
+        await use_case.execute(
+            task_id=task.id, current_user=assignee, updates={"assigned_to": other_user.id}
+        )
