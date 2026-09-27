@@ -53,7 +53,7 @@ jobs:
       - run: pytest --cov=app --cov-report=term-missing
 
   frontend:
-    name: Frontend (lint, strict build, Storybook a11y)
+    name: Frontend (lint, unit tests, strict build, Storybook a11y)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -67,6 +67,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run lint
+      - run: npm run test:coverage
       - run: npm run build
       - run: npm run build-storybook
       - run: npx playwright install --with-deps chromium

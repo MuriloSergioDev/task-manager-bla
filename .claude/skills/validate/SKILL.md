@@ -32,6 +32,7 @@ because a similar one passed.
 
 ```bash
 npm run lint              # expect 0 warnings, not just 0 errors
+npm run test:coverage     # Vitest unit tests (logic modules and forms)
 npm run build             # tsc -b in strict mode (app, node and e2e configs) + vite build
 npm run build-storybook
 npm run test:storybook    # every story: no console errors, no axe violations

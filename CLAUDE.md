@@ -42,6 +42,7 @@ Frontend (from `frontend/`):
 
 ```bash
 npm run lint && npm run build                  # oxlint; tsc -b (strict) + vite build
+npm test                                       # Vitest unit tests (TZ pinned to UTC-3 on purpose)
 npm run build-storybook && npm run test:storybook   # axe + console errors on every story
 npm run test:e2e                               # Playwright against the running, seeded stack
 npm run test:visual:baseline / test:visual     # before/after pixel diff for UI-neutral refactors
@@ -67,7 +68,9 @@ Run the whole validation pass with the `/validate` skill.
   contrast). New UI components get a story. See
   [docs/design-system.md](docs/design-system.md).
 - **Test first for business behaviour.** Integration tests run against real
-  Postgres, not SQLite. Test behaviour, not implementation. Coverage must stay
+  Postgres, not SQLite. Frontend logic (dates, URL state, permissions, API
+  error handling, form payloads) gets Vitest unit tests next to the code; a
+  regression test must be shown to fail against the old code. Test behaviour, not implementation. Coverage must stay
   at 80% or more (it's about 98% now).
 - **No new dependency without a clear reason**, and no abstraction without a
   second use.
