@@ -1,3 +1,5 @@
+> **About this file.** This is the specification the project was built from, kept word for word. During the build it was the repository's `CLAUDE.md` (the instructions Claude Code loads into every session) and drove the nine-phase workflow described in [ai-development.md](ai-development.md). Once those phases were complete it moved here, and a shorter `CLAUDE.md` for ongoing work replaced it: see [../CLAUDE.md](../CLAUDE.md) and [ai-development.md §12](ai-development.md#12-harness-how-the-repo-is-set-up-for-ai-assisted-work).
+
 # Python Technical Interview Exercise - Project Instructions
 
 ## Role

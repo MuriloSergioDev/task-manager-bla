@@ -30,3 +30,6 @@ dist/
 Thumbs.db
 
 # Alembic (keep versions, ignore nothing extra for now)
+
+# Claude Code: per-user local settings (shared project config in .claude/ is committed)
+.claude/settings.local.json
