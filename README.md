@@ -6,7 +6,7 @@ A full-stack task management application built as a technical-interview exercise
 
 ## Overview
 
-Users can register, log in, create/view/update/delete tasks, assign tasks to other users, mark tasks complete, filter tasks by status and due date, and paginate results. The full set of user-facing behavior, with acceptance criteria mapped to endpoints and tests, is in [docs/user-stories.md](docs/user-stories.md). The application demonstrates production-quality engineering practices at interview scope: layered backend architecture, comprehensive automated testing (unit, integration and API tests, plus browser end-to-end and accessibility tests) run in CI, rate limiting, async background processing, and a responsive typed frontend.
+Users can register, log in, create/view/update/delete tasks, assign tasks to other users, mark tasks complete, filter tasks by status and due date, and paginate results. The full set of user-facing behavior, with acceptance criteria mapped to endpoints and tests, is in [docs/user-stories.md](docs/user-stories.md). The application demonstrates production-quality engineering practices at interview scope: layered backend architecture, comprehensive automated testing (backend unit, integration and API tests; frontend unit tests; browser end-to-end and accessibility tests) run in CI, rate limiting, async background processing, and a responsive typed frontend.
 
 ## Architecture
 
@@ -189,14 +189,21 @@ Frontend (from `frontend/`; run `npm install` and `npx playwright install chromi
 
 ```bash
 npm run lint                        # oxlint, fails on warnings
+npm test                            # Vitest unit tests (npm run test:coverage for coverage)
 npm run build                       # strict TypeScript (app, node and e2e configs) + production build
 npm run build-storybook && npm run test:storybook   # axe + console errors on every component story
 npm run test:e2e                    # Playwright against the running, seeded stack: main flows + axe on every screen
 ```
 
+The frontend has four layers:
+- **Unit tests (Vitest):** logic and forms. They run with the timezone pinned to UTC-3, so "is this overdue?" can't silently fall back to the UTC date.
+- **Storybook checks:** accessibility and console errors on every component.
+- **End-to-end tests:** the main flows against the real stack.
+- **Visual diff:** on demand, for refactors.
+
 `test:e2e` runs at desktop and mobile widths and signs in once per run, because login is rate-limited. For refactors that shouldn't change the UI, `npm run test:visual:baseline` before and `npm run test:visual` after compare every screen pixel by pixel.
 
-**CI** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs all of this on every push and pull request: the backend suite against Postgres, frontend lint, build and Storybook accessibility, and the e2e suite against a freshly built and seeded `docker compose` stack. The e2e job uses the same setup steps as [Setup](#setup) above.
+**CI** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs all of this on every push and pull request: the backend suite against Postgres, frontend lint, unit tests, build and Storybook accessibility, and the e2e suite against a freshly built and seeded `docker compose` stack. The e2e job uses the same setup steps as [Setup](#setup) above.
 
 ## Coverage
 
@@ -283,6 +290,7 @@ Custom subagents, hooks and MCP servers were deliberately left out. The reasons 
 - an "overdue" check that used the UTC date (§9d);
 - text colours that failed WCAG contrast (§9e);
 - a global 401 handler that made `/register` unreachable by URL, and a TypeScript config that never enabled `strict` (§9f).
+- URL filters passed to the API unchecked, so a stale link broke the dashboard (§9g, found by writing the frontend unit tests first).
 
 Each entry in the log records what was rejected as well as what was accepted.
 

@@ -2,7 +2,7 @@
 
 What a user can do in the Task Manager, and the rules each action follows. Every story has acceptance criteria and a **Covered by** line naming the endpoint and the tests that check it, so each behavior can be traced to code.
 
-Backend test paths are relative to `backend/tests/`: `unit/…` tests use in-memory fakes, and `integration/…` tests hit a real Postgres database through the HTTP API or repository. Paths starting `e2e/` are Playwright tests in `frontend/e2e/app/`, run in a real browser against the running stack (in CI too), at desktop and mobile widths.
+Backend test paths are relative to `backend/tests/`: `unit/…` tests use in-memory fakes, and `integration/…` tests hit a real Postgres database through the HTTP API or repository. Paths starting `e2e/` are Playwright tests in `frontend/e2e/app/`, run in a real browser against the running stack (in CI too), at desktop and mobile widths. Paths starting `src/` are frontend unit tests (Vitest) in `frontend/src/`.
 
 ## Roles
 
@@ -27,7 +27,7 @@ A task is visible **only to its Owner and Assignee**. To everyone else it behave
 - A malformed email or too-short password → `422`, with the error shown on the form field.
 - The registration page opens when visited directly (typed URL, bookmark, reload), not only through the link on the login page.
 
-**Covered by:** `POST /api/v1/auth/register` · `integration/api/test_auth_endpoints.py::test_register_creates_user`, `::test_register_rejects_duplicate_email`, `::test_register_rejects_invalid_payload` · `unit/application/test_register_user_use_case.py` · `e2e/smoke.spec.ts` › *can open the registration page directly*
+**Covered by:** `POST /api/v1/auth/register` · `integration/api/test_auth_endpoints.py::test_register_creates_user`, `::test_register_rejects_duplicate_email`, `::test_register_rejects_invalid_payload` · `unit/application/test_register_user_use_case.py` · `src/features/auth/components/RegisterForm.test.tsx` (client-side validation, payload, API error) · `src/lib/apiClient.test.ts` (no redirect on the session probe) · `e2e/smoke.spec.ts` › *can open the registration page directly*
 
 ### US-1.2 — Log in
 **The visitor should be able to log in with their email and password, so that they can reach their tasks.**
@@ -67,7 +67,7 @@ A task is visible **only to its Owner and Assignee**. To everyone else it behave
 - A visitor opening the dashboard is redirected to `/login`.
 - A logged-in user opening `/login` or `/register` is redirected to the dashboard.
 
-**Covered by:** frontend `ProtectedRoute` / `PublicOnlyRoute` · `e2e/smoke.spec.ts` › *is sent to sign in when opening the dashboard*. The logged-in redirect away from `/login` and `/register` was checked by hand in a browser and has no automated test.
+**Covered by:** frontend `ProtectedRoute` / `PublicOnlyRoute` · `src/lib/apiClient.test.ts` (which 401s send the user to sign in) · `e2e/smoke.spec.ts` › *is sent to sign in when opening the dashboard*. The logged-in redirect away from `/login` and `/register` was checked by hand in a browser and has no automated test.
 
 ---
 
@@ -80,7 +80,7 @@ A task is visible **only to its Owner and Assignee**. To everyone else it behave
 - A missing or overlong title → `422`, shown on the form field.
 - An assignee id that doesn't exist → `422` "assigned_to user does not exist".
 
-**Covered by:** `POST /api/v1/tasks` · `integration/api/test_task_crud_endpoints.py::test_create_and_get_task`, `::test_create_task_rejects_invalid_payload`, `::test_create_task_rejects_unknown_assignee`, `::test_create_task_requires_authentication` · `unit/application/test_create_task_use_case.py`
+**Covered by:** `POST /api/v1/tasks` · `integration/api/test_task_crud_endpoints.py::test_create_and_get_task`, `::test_create_task_rejects_invalid_payload`, `::test_create_task_rejects_unknown_assignee`, `::test_create_task_requires_authentication` · `unit/application/test_create_task_use_case.py` · `src/features/tasks/components/TaskFormModal.test.tsx` (title rules, empty fields sent as `null`, assignee, API errors)
 
 ### US-2.2 — See only my tasks
 **The user should see only the tasks they own or are assigned to, so that other people's work stays private.**
@@ -105,7 +105,7 @@ A task is visible **only to its Owner and Assignee**. To everyone else it behave
 - Status can be set to *To do* or *In progress*. A completed task can be reopened, which clears `completed_at`.
 - Anyone else → `404`, and the UI shows no Edit button.
 
-**Covered by:** `PATCH /api/v1/tasks/{id}` · `integration/api/test_task_crud_endpoints.py::test_owner_can_update_task`, `::test_assignee_can_update_task`, `::test_stranger_updating_task_gets_404`, `::test_reverting_completed_task_status_clears_completed_at`, `::test_update_nonexistent_task_returns_404`
+**Covered by:** `PATCH /api/v1/tasks/{id}` · `src/features/tasks/components/TaskFormModal.test.tsx` (status sent only when changed, never the assignee) · `src/features/tasks/hooks/useTaskPermissions.test.tsx` (who sees Edit) · `integration/api/test_task_crud_endpoints.py::test_owner_can_update_task`, `::test_assignee_can_update_task`, `::test_stranger_updating_task_gets_404`, `::test_reverting_completed_task_status_clears_completed_at`, `::test_update_nonexistent_task_returns_404`
 
 ### US-2.5 — Delete a task
 **The Owner or Assignee should be able to delete a task after confirming, so that finished or mistaken tasks don't clutter the list.**
@@ -189,8 +189,9 @@ A task is visible **only to its Owner and Assignee**. To everyone else it behave
 
 - Filters and the current page are kept in the URL (`?status=…&due_date_from=…&page=…`).
 - **Clear filters** resets all of them at once.
+- A hand-edited or stale URL with an unknown status or a malformed date ignores that filter instead of failing to load the list.
 
-**Covered by:** frontend `taskFilterState.ts` · `e2e/smoke.spec.ts` › *status filter goes to the URL, the API and the list*, › *filters survive a reload and clear in one click*
+**Covered by:** `src/features/tasks/taskFilterState.test.tsx` · `e2e/smoke.spec.ts` › *status filter goes to the URL, the API and the list*, › *filters survive a reload and clear in one click*
 
 ### US-4.4 — Paginate
 **The user should be able to page through their tasks 20 at a time, so that long lists stay fast and readable.**
@@ -200,14 +201,15 @@ A task is visible **only to its Owner and Assignee**. To everyone else it behave
 - If the current page no longer exists (for example after deleting the last task on the last page), the app moves to the last page that does.
 - The API rejects `page` < 1 and `page_size` > 100 with `422`. A page past the end returns an empty `items` list.
 
-**Covered by:** `integration/api/test_task_crud_endpoints.py::test_list_tasks_returns_paginated_envelope`, `::test_list_tasks_rejects_page_size_over_cap` · `integration/api/test_task_filtering_pagination.py::test_pagination_reports_correct_page_count`, `::test_pagination_beyond_last_page_returns_empty_items`, `::test_list_tasks_with_no_matches_reports_zero_pages` · UI checked in a headless browser with 23 tasks (2 pages).
+**Covered by:** `integration/api/test_task_crud_endpoints.py::test_list_tasks_returns_paginated_envelope`, `::test_list_tasks_rejects_page_size_over_cap` · `integration/api/test_task_filtering_pagination.py::test_pagination_reports_correct_page_count`, `::test_pagination_beyond_last_page_returns_empty_items`, `::test_list_tasks_with_no_matches_reports_zero_pages` · `src/components/ui/Pagination.test.tsx` (range text, disabled ends) · `src/features/tasks/taskFilterState.test.tsx` (a filter change resets to page 1). The step back after deleting the last task on the last page was checked by hand in a browser.
 
 ### US-4.5 — Spot overdue work
 **The user should see incomplete tasks that are past their due date highlighted, so that late work stands out.**
 
-- Overdue tasks show their due date in red with a warning icon, and screen readers announce "Overdue". Completed tasks show their completion date instead.
+- An overdue task's date stub turns brick red, the row says how late it is ("6 days late"), and screen readers hear "Overdue, was due <date>". A task due today is marked "Due today". Completed tasks show their completion date instead.
+- "Today" is the viewer's local calendar day, not the UTC date.
 
-**Covered by:** frontend `dueDateStatus.ts` / `TaskListItem.tsx`.
+**Covered by:** `src/features/tasks/dueDateStatus.test.ts` (every state, days late, and the local-versus-UTC regression) · `DateStub` stories in Storybook, checked by `e2e/storybook`.
 
 ### US-4.6 — Clear loading, empty and error states
 **The user should always know whether their tasks are loading, whether there are none, or whether something went wrong, so that they're never left looking at a blank screen.**
@@ -242,5 +244,5 @@ A task is visible **only to its Owner and Assignee**. To everyone else it behave
 
 ## Known limitations
 
-- **Frontend tests cover wiring, not every rule.** The Playwright suite (`frontend/e2e/`) checks the main flows, route guards, filters and accessibility against the real stack. Business rules are tested in the backend suite, and the UI only mirrors them. Where a story relies on a manual browser check, its **Covered by** line says so.
+- **Frontend coverage is targeted, not total.** Vitest unit tests cover the frontend's own logic (dates, URL state, permissions, API error handling, form payloads), and the Playwright suites cover the main flows and accessibility. Business rules are enforced and tested in the backend; the UI only mirrors them. Purely presentational components are covered by Storybook stories rather than unit tests. Where a story relies on a manual browser check, its **Covered by** line says so.
 - **Completing via PATCH.** `PATCH` with `status: COMPLETED` sets the status but doesn't set `completed_at` or enqueue the activity job; only `POST /tasks/{id}/complete` does both. The UI never sends it, since the edit form doesn't offer *Completed* as a new status, but a direct API caller can. Fixing it means routing that case through the completion use case.

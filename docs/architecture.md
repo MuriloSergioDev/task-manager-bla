@@ -355,7 +355,7 @@ Mapped to the [specification](specification.md)'s required coverage list:
 
 **Coverage.** `pytest-cov` gate at 80%, configured in `pyproject.toml`; unit tests carry most of the coverage cheaply, integration tests validate the wiring.
 
-*Amended during implementation:* the frontend gained three automated layers on top of this backend pyramid, all Playwright:
+*Amended during implementation:* the frontend gained its own layers on top of this backend pyramid. Vitest unit tests sit next to the code (`src/**/*.test.ts(x)`) for logic and forms. There are also three Playwright layers:
 - `frontend/e2e/app/smoke.spec.ts` for the main flows and route guards against the real stack;
 - `a11y.spec.ts`, which runs axe on every screen and dialog;
 - `frontend/e2e/storybook/`, which runs axe and checks for console errors on every component story.

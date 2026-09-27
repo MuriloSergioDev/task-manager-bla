@@ -13,6 +13,7 @@ architecture and setup are in the [root README](../README.md).
 | `src/components/layout` | App shell, route guards, auth layout |
 | `src/styles/tokens.css` | Design tokens, the only place visual values are defined |
 | `src/lib` | Shared API client (cookie session, error normalisation) and query client |
+| `src/**/*.test.ts(x)` | Vitest unit tests, next to the code they test (`src/test/` holds shared factories and render helpers) |
 | `e2e/app` | Playwright tests against the running app: smoke, a11y, visual |
 | `e2e/storybook` | Playwright + axe over every Storybook story |
 
@@ -22,6 +23,7 @@ architecture and setup are in the [root README](../README.md).
 |---|---|
 | `npm run dev` | Vite dev server on http://localhost:5173 (normally run by Docker Compose) |
 | `npm run lint` | oxlint; fails on warnings |
+| `npm test` / `npm run test:coverage` | Vitest unit tests: date rules, URL filter state, the API client's error and redirect rules, permissions, form validation and payloads |
 | `npm run build` | `tsc -b` (strict: app, node and e2e configs) + production build |
 | `npm run storybook` | Design system on http://localhost:6006 |
 | `npm run build-storybook` | Static Storybook in `storybook-static/` |

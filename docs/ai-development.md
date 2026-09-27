@@ -312,6 +312,44 @@ Rewriting them properly exposed:
 
 ---
 
+## 9g. Testing: frontend unit tests, written to fail first, and a bug found by writing them
+
+**Prompt/goal:** "Is there a unit test for the frontend?" There wasn't. All frontend tests ran in a real browser, and two of this project's frontend bugs (the UTC "overdue" check in §9d, the `/register` redirect in §9f) were in plain logic that a unit test would have caught directly. The user approved adding them.
+
+**Accepted:**
+- **Vitest** with jsdom, Testing Library and `user-event`. `vitest.config.ts` reuses the app's Vite config, so no second build pipeline is needed. Tests sit next to the code (`src/**/*.test.ts(x)`), with shared factories and a provider-wrapping render helper in `src/test/`.
+- **A pinned timezone.** `vitest.config.ts` pins the timezone to `America/Sao_Paulo` (UTC-3, no daylight saving). Date logic can only be wrong about "local versus UTC" in a zone that isn't UTC, so pinning one makes that class of bug testable, and identical on every machine and in CI.
+- **59 tests in 7 files**, aimed at the frontend's own logic rather than markup:
+  - due-date rules (`dueDateStatus`);
+  - URL filter state and the `useTaskFilters` hook;
+  - the API client's 401 and error rules;
+  - `useTaskPermissions`, checked against the backend's rules;
+  - `Pagination`;
+  - `RegisterForm` and `TaskFormModal` (validation, exact request payloads, API errors).
+
+**Test-first, and each regression test shown to catch its bug:**
+- **The 401 rule.** It lived inside an axios interceptor, where it couldn't be tested. I wrote the tests first against the functions I wanted, `shouldRedirectToLogin` and `toApiError`. They ran red (9 failures, "not a function"), then the interceptor was refactored to call them and they went green.
+- **Putting the old bugs back.** Reinstating the old UTC `localToday()` made exactly the two timezone tests fail, with the other 12 passing. Reinstating the old redirect behaviour failed exactly the session-probe test.
+- **The form tests.** Disconnecting the `Controller`-wired assignee failed the payload test. Always sending `status` on edit failed the "unchanged fields" test.
+
+  All of these were temporary edits, restored and confirmed with `git diff`.
+
+**Found by writing the tests: a URL could break the dashboard.** `parseTaskFilters` cast `?status=` from the URL without checking it. I reproduced it in the live app before changing anything: `/dashboard?status=DONE` sent `status=DONE` to the API, got a 422 twice (the query retries once), and showed "Tasks couldn't be loaded". The same module already guarded `page` against exactly this, so status and the dates now get the same treatment. `isTaskStatus` (using `Object.hasOwn`, not `in`, which would accept `"toString"`) and a `YYYY-MM-DD` check drop values the API would reject. The two new tests were red before the fix and green after, and the live URL now shows the unfiltered list.
+
+**Rejected:**
+- **Jest:** it needs its own transform configuration, whereas Vitest reuses Vite's.
+- **`jest-dom` matchers:** plain assertions are enough, and it's one less dependency.
+- **MSW for network mocking:** spying on the API module functions tests the same boundary without adding a service-worker layer.
+- **A coverage threshold for the whole frontend.** Line coverage is 48.7% overall, but the logic modules are at 90–100%. The uncovered code is presentational components and data-fetching hooks, which the Storybook and e2e suites cover. A blanket threshold would push towards tests of markup.
+
+**Validated:**
+- `npm run test:coverage`: 59 passed.
+- `tsc -b` (strict, which now includes the test files) and `oxlint --deny-warnings` are clean.
+- `npm run test:e2e`: 26 passed after the `apiClient` and `taskFilterState` changes.
+- CI's frontend job now runs the unit tests with coverage.
+
+---
+
 ## 10. Security review highlights
 
 - **Access token in an httpOnly cookie, not `localStorage`:** see §9a — closes off token theft via XSS; CSRF mitigated via `SameSite=Lax` plus a strict CORS origin allowlist rather than a separate token scheme.
