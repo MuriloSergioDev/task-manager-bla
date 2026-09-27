@@ -6,8 +6,8 @@ this file is the short, current version for ongoing work.
 
 ## What this is
 
-A full-stack task manager built as a technical-interview exercise, and
-evaluated on engineering judgement and on how AI was used. It has a FastAPI
+A full-stack task manager where engineering judgement and the way AI is
+used matter as much as the features. It has a FastAPI
 backend with a Clean Architecture layout, a React + TypeScript frontend,
 Postgres, Redis and Celery, all run with Docker Compose.
 
@@ -33,7 +33,8 @@ Backend (from `backend/`). Dev tools are **not** in the `api` container, so use
 the local venv (`.venv/bin/python` on macOS/Linux):
 
 ```bash
-.venv/Scripts/python -m pytest                 # 127 tests; integration tests need Postgres (taskdb_test)
+uv sync --extra dev                            # exact versions from uv.lock; `pre-commit install` once
+.venv/Scripts/python -m pytest                 # 134 tests; integration tests need Postgres (taskdb_test)
 .venv/Scripts/python -m ruff check . && .venv/Scripts/python -m ruff format --check .
 .venv/Scripts/python -m mypy app               # strict
 ```

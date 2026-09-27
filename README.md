@@ -2,11 +2,11 @@
 
 [![CI](https://github.com/MuriloSergioDev/task-manager-bla/actions/workflows/ci.yml/badge.svg)](https://github.com/MuriloSergioDev/task-manager-bla/actions/workflows/ci.yml)
 
-A full-stack task management application built as a technical-interview exercise, demonstrating Clean Architecture on the backend, a typed React frontend, JWT authentication, background job processing, and a fully containerized development stack.
+A full-stack task management application demonstrating Clean Architecture on the backend, a typed React frontend, JWT authentication, background job processing, and a fully containerized development stack.
 
 ## Overview
 
-Users can register, log in, create/view/update/delete tasks, assign tasks to other users, mark tasks complete, filter tasks by status and due date, and paginate results. The full set of user-facing behavior, with acceptance criteria mapped to endpoints and tests, is in [docs/user-stories.md](docs/user-stories.md). The application demonstrates production-quality engineering practices at interview scope: layered backend architecture, comprehensive automated testing (backend unit, integration and API tests; frontend unit tests; browser end-to-end and accessibility tests) run in CI, rate limiting, async background processing, and a responsive typed frontend.
+Users can register, log in, create/view/update/delete tasks, assign tasks to other users, mark tasks complete, filter tasks by status and due date, and paginate results. The full set of user-facing behavior, with acceptance criteria mapped to endpoints and tests, is in [docs/user-stories.md](docs/user-stories.md). The application demonstrates production-quality engineering practices at a small-project scope: layered backend architecture, comprehensive automated testing (backend unit, integration and API tests; frontend unit tests; browser end-to-end and accessibility tests) run in CI, rate limiting, async background processing, and a responsive typed frontend.
 
 ## Architecture
 

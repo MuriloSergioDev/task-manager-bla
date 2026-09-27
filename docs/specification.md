@@ -1,10 +1,10 @@
-> **About this file.** This is the specification the project was built from, kept word for word. During the build it was the repository's `CLAUDE.md` (the instructions Claude Code loads into every session) and drove the nine-phase workflow described in [ai-development.md](ai-development.md). Once those phases were complete it moved here, and a shorter `CLAUDE.md` for ongoing work replaced it: see [../CLAUDE.md](../CLAUDE.md) and [ai-development.md §12](ai-development.md#12-harness-how-the-repo-is-set-up-for-ai-assisted-work).
+> **About this file.** This is the specification the project was built from, kept as written apart from minor wording edits. During the build it was the repository's `CLAUDE.md` (the instructions Claude Code loads into every session) and drove the nine-phase workflow described in [ai-development.md](ai-development.md). Once those phases were complete it moved here, and a shorter `CLAUDE.md` for ongoing work replaced it: see [../CLAUDE.md](../CLAUDE.md) and [ai-development.md §12](ai-development.md#12-harness-how-the-repo-is-set-up-for-ai-assisted-work).
 
-# Python Technical Interview Exercise - Project Instructions
+# Task Manager - Project Instructions
 
 ## Role
 
-Act as a senior software engineer helping me build a production-quality technical interview exercise.
+Act as a senior software engineer helping me build a production-quality full-stack application.
 
 You should prioritize:
 
@@ -642,7 +642,7 @@ Avoid:
 
 Do not over-engineer the project.
 
-The architecture should be clean but understandable during a technical interview.
+The architecture should be clean but easy to understand and explain.
 
 ---
 
@@ -743,7 +743,7 @@ Include a section describing:
 * How security was reviewed
 * How performance was evaluated
 
-This section is important because the interview specifically evaluates GenAI usage.
+This section is important because GenAI usage is explicitly evaluated.
 
 ---
 
@@ -1009,7 +1009,7 @@ Fix the issues found.
 
 # Final Deliverable
 
-The final repository should feel like a small production application that a senior engineer could confidently present during a technical interview.
+The final repository should feel like a small production application that a senior engineer could confidently present and defend.
 
 The implementation should be understandable enough that I can explain every important design decision during a code review.
 
