@@ -108,12 +108,12 @@ A task is visible **only to its Owner and Assignee**. To everyone else it behave
 **Covered by:** `PATCH /api/v1/tasks/{id}` · `src/features/tasks/components/TaskFormModal.test.tsx` (status sent only when changed, never the assignee) · `src/features/tasks/hooks/useTaskPermissions.test.tsx` (who sees Edit) · `integration/api/test_task_crud_endpoints.py::test_owner_can_update_task`, `::test_assignee_can_update_task`, `::test_stranger_updating_task_gets_404`, `::test_reverting_completed_task_status_clears_completed_at`, `::test_update_nonexistent_task_returns_404`
 
 ### US-2.5 — Delete a task
-**The Owner or Assignee should be able to delete a task after confirming, so that finished or mistaken tasks don't clutter the list.**
+**The Owner should be able to delete a task after confirming, so that finished or mistaken tasks don't clutter the list.**
 
 - The UI asks for confirmation in a dialog first → `204`.
 - Anyone else → `404`, and the task is left untouched.
 
-**Covered by:** `DELETE /api/v1/tasks/{id}` · `integration/api/test_task_crud_endpoints.py::test_owner_can_delete_task`, `::test_assignee_can_delete_task`, `::test_stranger_deleting_task_gets_404`, `::test_delete_nonexistent_task_returns_404`
+**Covered by:** `DELETE /api/v1/tasks/{id}` · `integration/api/test_task_crud_endpoints.py::test_owner_can_delete_task`, `::test_assignee_cannot_delete_task`, `::test_stranger_deleting_task_gets_404`, `::test_delete_nonexistent_task_returns_404`
 
 ### US-2.6 — Mark a task complete
 **The Owner or Assignee should be able to mark a task complete in one click, so that finishing work is quick.**
