@@ -4,7 +4,7 @@ A full-stack task management application built as a technical-interview exercise
 
 ## Overview
 
-Users can register, log in, create/view/update/delete tasks, assign tasks to other users, mark tasks complete, filter tasks by status and due date, and paginate results. The application demonstrates production-quality engineering practices at interview scope: layered backend architecture, comprehensive automated testing (unit + integration + API), rate limiting, async background processing, and a responsive typed frontend.
+Users can register, log in, create/view/update/delete tasks, assign tasks to other users, mark tasks complete, filter tasks by status and due date, and paginate results. The full set of user-facing behavior, with acceptance criteria mapped to endpoints and tests, is in [docs/user-stories.md](docs/user-stories.md). The application demonstrates production-quality engineering practices at interview scope: layered backend architecture, comprehensive automated testing (unit + integration + API), rate limiting, async background processing, and a responsive typed frontend.
 
 ## Architecture
 
@@ -45,7 +45,7 @@ workers/         Celery app config and the background task
 
 Route handlers never contain business logic: they resolve dependencies, call a use case, and translate domain exceptions to HTTP status codes. This is what lets the domain/application layers be unit-tested with in-memory fakes, with no database or FastAPI involved.
 
-**Frontend layering** (`frontend/src/`): `features/{auth,tasks}` hold feature-specific API calls, TanStack Query hooks, and components; `components/{ui,layout}` hold generic/reusable pieces; `lib/` holds the shared axios client and query client; state that should survive a refresh or be shareable (task filters, pagination) lives in the URL, not React state.
+**Frontend layering** (`frontend/src/`): `features/{auth,tasks}` hold feature-specific API calls, TanStack Query hooks, and components; `components/{ui,layout}` hold generic/reusable pieces (the [design system](#design-system)'s component layer, styled only through the tokens in `styles/tokens.css`); `lib/` holds the shared axios client and query client; state that should survive a refresh or be shareable (task filters, pagination) lives in the URL, not React state.
 
 ## Technology Choices
 
@@ -62,7 +62,8 @@ Route handlers never contain business logic: they resolve dependencies, call a u
 | **React + TypeScript + Vite** | Fast dev server, typed components, no build-config yak-shaving. |
 | **TanStack Query** | Server state (tasks, users) doesn't belong in component state — Query handles caching, invalidation, and loading/error states without hand-rolled reducers. |
 | **React Router** | Standard SPA routing; used for auth guards and URL-synced filter/pagination state. |
-| **Tailwind CSS v4** | Utility classes keep styling co-located with markup without a separate design-system build step, appropriate for this scope. |
+| **Tailwind CSS v4** | Utility classes keep styling co-located with markup. Its CSS-first `@theme` turns the design tokens into utilities (`bg-ink`, `text-label`, `rounded-sheet`), so the design system needs no separate build step. |
+| **Storybook** (dev only) | Documents and previews the design system's components in isolation, with an axe accessibility check on every story. Chosen over a hand-built preview page because it's the industry-standard workshop reviewers already know; it's never bundled into the app. |
 | **React Hook Form** | Uncontrolled-input form state avoids re-rendering on every keystroke; built-in validation rules cover this app's needs without adding a schema-validation library. |
 
 ## Setup
@@ -113,6 +114,7 @@ cd frontend
 npm install
 cp .env.example .env
 npm run dev
+npm run storybook          # design system: http://localhost:6006
 ```
 
 ## Environment Variables
@@ -192,6 +194,16 @@ Gate: 80% (configured in `pyproject.toml`); actual coverage is in the high 90s. 
 
 Interactive Swagger UI: **http://localhost:8000/docs** (also `/redoc`). Generated from the FastAPI route definitions and Pydantic schemas — always in sync with the actual API, documents auth (bearer JWT), request/response shapes, query parameters, and error responses.
 
+## Design System
+
+The frontend has a small, home-made design system (no component library):
+
+- **Tokens:** `frontend/src/styles/tokens.css` is the only place visual values are defined (colour, type scale, radius, widths, elevation, motion). Tailwind turns them into utilities, and components never use one-off values like `text-[13px]`.
+- **Components:** `frontend/src/components/ui` (`Button`, `Input`, `Select`, `Textarea`, `Modal`, `ConfirmDialog`, `Alert`, `EmptyState`, `Pagination`, `StatusBadge`, `Spinner`), imported from one index.
+- **Storybook:** `cd frontend && npm run storybook` → http://localhost:6006. It has a live **Foundations** page generated from `tokens.css`, stories for every component and state, and the axe accessibility panel. `npm run build-storybook` produces a static copy.
+
+Rules, naming and how to add a token or component: [docs/design-system.md](docs/design-system.md).
+
 ## Demo Credentials
 
 Seeded by `python -m scripts.seed` (see [Database](#database)):
@@ -202,15 +214,19 @@ Seeded by `python -m scripts.seed` (see [Database](#database)):
 | `bob@example.com` | `DemoPass123!` |
 | `carol@example.com` | `DemoPass123!` |
 
-Seed data includes tasks in all three statuses, with and without due dates (including one overdue), assigned and unassigned, and some already completed — enough variety to exercise every filter combination immediately after seeding.
+Seed data includes 7 hand-written tasks plus a deterministic backlog of 30 generated ones owned by alice — every combination of status × assignee (unassigned/bob/carol), due dates in the past, future, and none (several overdue), and some already completed. Alice sees 35 tasks, so her list spans two pages at the dashboard's page size of 20 and pagination is demonstrable immediately after seeding.
 
 These are local-development-only credentials for a project with no real users. Never reuse this pattern for a real deployment.
 
 ## Design Decisions
 
-**Authorization model.** Any authenticated user can view all tasks — there's no per-user visibility restriction, matching the spec's "authenticated users can view tasks." Only the **owner** (creator) may update, delete, or reassign a task; the **owner or current assignee** may mark it complete. This required adding an `owner_id` column distinct from `assigned_to`: ownership (who controls the record) and assignment (who's doing the work) are different concerns, and collapsing them would either let any assignee delete a task they didn't create, or block the person actually doing the work from marking it done.
+**Authorization model.** Tasks are **private to the people involved**: a user can only see tasks they own or are assigned to. This is enforced on the server — `ListTasksUseCase` always scopes the query to the current user (it's not a client-supplied filter, so no route can forget or widen it), and every single-task use case loads through `get_visible_task`. A task you can't see returns **`404`, not `403`**, identical to a nonexistent id, so task ids can't be probed to learn what exists; `403` is reserved for users who *can* see a task but lack a specific permission (an assignee trying to reassign). An earlier version let any authenticated user read every task via the API while the UI hid them client-side — writing the user stories exposed that mismatch (see [docs/ai-development.md](docs/ai-development.md)). The **owner or current assignee** may update, delete, or complete a task; only the **owner** may reassign it to someone else — reassignment hands off record-level control, which is a different decision from doing the work itself, so it stays narrower than edit/delete. This required adding an `owner_id` column distinct from `assigned_to`: ownership and assignment are different concerns, and collapsing them would either let a stranger manipulate a task they have no relationship to, or block the person actually doing the work from managing it.
+
+**Dashboard: paginated list, not a board.** Tasks are shown as a server-paginated list (20 per page, Previous/Next, "Page X of Y · N tasks"), with page and filters in the URL. An earlier drag-and-drop Kanban board was replaced: a board wants every task at once, which meant fetching one 100-item page and bucketing client-side — incompatible with real pagination and with accurate totals. The list shows one grid row per task on desktop and stacks into cards on mobile. Status changes go through the edit form (To do / In progress, or reopening a completed task — the backend clears `completed_at` when status moves away from `COMPLETED`), while completing uses the dedicated **Complete** action, because `POST /tasks/{id}/complete` is what stamps `completed_at` and enqueues the activity job. Reassignment stays owner-only; non-owners see the assignee as read-only text. The UI hides actions the user can't perform, but the API remains the actual authority.
 
 **No refresh tokens.** A single short-lived (30 min default) access token; on expiry, the frontend redirects to login. Refresh-token rotation is real complexity (secure storage, revocation, rotation-on-use) that wasn't asked for.
+
+**Access token lives in an httpOnly cookie, not localStorage.** `POST /api/v1/auth/login` sets the JWT as an `HttpOnly`, `SameSite=Lax` cookie (`Secure` outside `development`) rather than returning it in the response body; the frontend never has a JS-readable copy of the token, closing off token theft via XSS. The tradeoff is CSRF exposure, mitigated two ways: `SameSite=Lax` already excludes the cookie from cross-site `POST`/`PATCH`/`DELETE` requests (the mutating endpoints), and CORS is pinned to an explicit origin allowlist rather than `*`. This is deliberately short of a double-submit CSRF token — `SameSite=Lax` plus a strict CORS origin list covers the realistic browser attack surface for this app's scope, and a full CSRF-token scheme would be complexity without a matching threat here. Because the token is no longer client-readable, the frontend can't decode it locally to learn who's logged in; `GET /api/v1/auth/me` exists for that (session bootstrap on page load) and `POST /api/v1/auth/logout` clears the cookie server-side.
 
 **Self-registration exists, but isn't the primary path.** `POST /api/v1/auth/register` is a real, tested endpoint, but the demo credentials above (via the seed script) are the intended way to explore the app with realistic data already in place.
 
@@ -234,7 +250,7 @@ These are local-development-only credentials for a project with no real users. N
 - `TaskFormModal` rendered inside each table row's fragment, landing as a direct child of `<tbody>` — invalid HTML that browsers silently "fix" visually, so `tsc` and a lint pass both stayed clean. A real headless-Chromium pass (Playwright) surfaced the React hydration warning in the console.
 - Both `api` and `celery-worker` ran migrations on startup, documented at the time as "harmless." That was true against the already-migrated volume every phase since Phase 6 had been reusing — but a truly fresh `docker compose up --build` had both containers race on creating Alembic's own version-tracking table, and one lost. Only `down -v` followed by a real cold start reproduced it.
 
-**How edge cases were handled.** Inactive users, expired/malformed/wrong-secret tokens, duplicate-email registration, unknown assignees, tasks with no due date under a range filter, pagination past the last page, and rate-limit exhaustion are each an explicit test case (see `backend/tests/`), not just the happy path. A Phase 9 pass added two more found by deliberately trying to break things rather than just re-confirming the golden path: completing a task and immediately deleting it races the async activity-log write against the delete (a permanent `IntegrityError`, now failed fast instead of retried three times), and a stale/expired token left in `localStorage` from a previous session now fails auth immediately on load instead of flashing the dashboard first. On the frontend, loading/empty/error states are handled explicitly per screen (not just the "data arrived" case), and the dashboard's table scrolls horizontally within its own container on narrow viewports rather than squishing content or letting the page body scroll sideways — verified visually via the Playwright screenshots described above, at a 375px mobile viewport specifically.
+**How edge cases were handled.** Inactive users, expired/malformed/wrong-secret tokens, duplicate-email registration, unknown assignees, tasks with no due date under a range filter, pagination past the last page, and rate-limit exhaustion are each an explicit test case (see `backend/tests/`), not just the happy path. A Phase 9 pass added two more found by deliberately trying to break things rather than just re-confirming the golden path: completing a task and immediately deleting it races the async activity-log write against the delete (a permanent `IntegrityError`, now failed fast instead of retried three times), and a stale/expired token left in `localStorage` from a previous session now failed auth immediately on load instead of flashing the dashboard first (this applied when the access token was still stored in `localStorage`; it has since moved to an httpOnly cookie — see "Design Decisions" — which sidesteps the client-side staleness check entirely by never giving the frontend a token to read). On the frontend, loading/empty/error states are handled explicitly per screen (not just the "data arrived" case), and the dashboard's task list stacks each row into a card on narrow viewports rather than squishing columns or letting the page body scroll sideways.
 
 **How security was reviewed:** covered in the [Security review highlights](docs/ai-development.md#10-security-review-highlights) section of the AI development log — password hashing, no-hash-in-response, startup secret validation, server-side assignee validation, rate-limit tiers, a live SQL-injection attempt against a filter parameter, and an unbounded login-password field found and fixed during the Phase 9 pass.
 

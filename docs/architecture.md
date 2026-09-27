@@ -144,8 +144,8 @@ frontend/
 │   │   │   └── authApi.ts
 │   │   └── tasks/
 │   │       ├── components/
-│   │       │   ├── TaskTable.tsx
-│   │       │   ├── TaskRow.tsx
+│   │       │   ├── TaskList.tsx         # paginated list (grid rows on md+, cards on mobile)
+│   │       │   ├── TaskListItem.tsx
 │   │       │   ├── TaskFormModal.tsx    # create/edit, RHF-driven
 │   │       │   ├── TaskFilters.tsx      # status + due-date filter controls
 │   │       │   ├── AssigneeSelect.tsx
@@ -376,6 +376,7 @@ Mapped to `claude.md`'s required coverage list:
 Decisions made explicit due to ambiguity in `claude.md`, confirmed with the user before this document was written:
 
 1. **Authorization model.** Any authenticated user can **view** all tasks. Any authenticated user can **create** a task, becoming its `owner_id`. Only the **owner** can **update**, **delete**, or **reassign** a task — this is the "private resource" `claude.md` says must not be manipulated by another user. The **owner or the current assignee** can **complete** a task, since completing is the act of doing assigned work, not a structural edit. This required adding an `owner_id` column to `tasks` distinct from the spec's literally-enumerated `assigned_to`.
+   *Amended during implementation:* the assignee can also edit and delete (only reassignment stays owner-only), and **viewing** is restricted to owner or assignee — other users get `404` for the task and never see it in lists. See the README's "Design Decisions" for the current rule.
 2. **Self-registration.** A public `POST /api/v1/auth/register` endpoint exists, in addition to seed-provided demo users — `claude.md` only mentions login and seed data, so this is an addition beyond the literal spec, made at the user's request.
 3. **Access-token-only authentication.** No refresh-token flow; a single short-lived (default 30 min, configurable) JWT. `claude.md` mentions only "Access token," never a refresh flow — adding one would be an unrequested abstraction.
 4. **Database testing strategy.** Real Postgres (via a Compose test service + per-test transactional rollback) for integration/API tests; in-memory fakes (no DB) for unit tests. Chosen over SQLite because the schema uses Postgres-specific features `claude.md` explicitly asks for.

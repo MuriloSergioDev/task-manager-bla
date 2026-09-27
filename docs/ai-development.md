@@ -158,8 +158,113 @@ Each entry follows: prompt/goal → generated approach → accepted/rejected →
 
 ---
 
+## 9a. Security: moving the access token from `localStorage` to an httpOnly cookie
+
+**Prompt/goal:** a post-launch security follow-up — the access token was in `localStorage`, readable by any JS running on the page, so any successful XSS payload could exfiltrate it. Requested fix: move to an httpOnly cookie.
+
+**What changed:** `POST /api/v1/auth/login` now sets the JWT as a `Set-Cookie` response header (`HttpOnly`, `SameSite=Lax`, `Secure` outside `development`) instead of returning it in the JSON body; `get_current_user` reads it via FastAPI's `Cookie(...)` dependency instead of an `Authorization: Bearer` header. Two new endpoints followed directly from the token no longer being client-readable: `POST /api/v1/auth/logout` (clears the cookie server-side) and `GET /api/v1/auth/me` (lets the frontend ask "who am I" on page load, replacing the old client-side JWT decode). The frontend's `AuthProvider` switched from a synchronous `localStorage` read to a `useQuery(['auth','me'], getCurrentUser)` bootstrap, which meant `ProtectedRoute`/`PublicOnlyRoute` needed a real loading state (previously they could assume auth state was known synchronously on first render).
+
+**Rejected:** a double-submit CSRF token scheme. `SameSite=Lax` already excludes the cookie from cross-site `POST`/`PATCH`/`DELETE`, and CORS was already pinned to an explicit origin allowlist rather than `*` — for this app's scope, that combination covers the realistic attack surface without the extra moving parts (a second cookie, header wiring on every mutating request, server-side comparison). Documented as a deliberate scope call in the README rather than left silent.
+
+**A test-infrastructure snag this surfaced:** the integration tests authenticate as multiple identities (owner/assignee/stranger) against a single `httpx.AsyncClient` within one test, which the old `Authorization` header made trivial (a different header value per request) but a cookie jar can't express the same way (one client, one jar). The fix was httpx's own per-request `cookies=` override — but that emits a `DeprecationWarning` ("set cookies on the client instance instead"), which doesn't actually support "briefly act as a different identity within one test" without a much larger rewrite (a separate `AsyncClient` per identity). Rather than silently ignore all warnings, added one narrowly-scoped `filterwarnings` entry in `pyproject.toml` naming the exact message and explaining why, so a real future warning still surfaces.
+
+**Validated, and a real bug found along the way:** backend — `pytest` (112 passed), `ruff check`, `mypy --strict`, plus a live `curl` cookie-jar walkthrough (login → cookie has `HttpOnly`/`SameSite=lax` → `/me` succeeds with the cookie and 401s without it → `/logout` clears it → `/me` 401s after). Frontend — `tsc -b`, `oxlint`, then a live Playwright pass against the actual Docker stack. The **first** Playwright run failed login with a client-side `TypeError` that looked like a bug in the new code; tracing it down (adding temporary `console.error` logging to the interceptor and to `onSuccess`, neither of which fired) pointed at something stranger than a logic bug — the running frontend container's Vite dev server hadn't picked up any of the session's file edits at all, so the browser was actually exercising the *old* pre-migration bundle (old code calling `decodeJwt(undefined)` against the new backend's response shape, which no longer includes `access_token`). Checking `docker logs` confirmed zero HMR update messages despite many saves — a known failure mode where a Windows-host bind mount doesn't reliably deliver filesystem-change events into the container's watcher. Fixed at the root with `server.watch.usePolling: true` in `vite.config.ts` (verified by editing a component, confirming an `hmr update` log line appeared without a container restart, and seeing the edit reflected in a fresh Playwright page load) rather than just restarting the container and moving on — a restart would have made this one test pass while leaving every future edit during this Docker setup silently stale, which is a worse failure mode than an easily-diagnosed crash.
+
+---
+
+## 9b. Frontend: Kanban board, and a plan's assumption that didn't survive contact with the real library
+
+**Prompt/goal:** replace the task table/list with a drag-and-drop Kanban board (three columns by status), decided via two explicit clarifying questions with the user (board vs. grouped list vs. view toggle; drag-and-drop vs. a "Move to..." menu) before any code was written, then a full planning pass (research agent + a dedicated planning agent) before implementation.
+
+**What changed:** new `@dnd-kit/core` + `@dnd-kit/utilities` dependency (added to both the host and the frontend container's separate `node_modules` volume, then a container restart — the same two-step process learned during the `lucide-react` addition). `TaskTable`/`TaskRow`/`TaskCard`/`StatusSelect`/`TaskStatusControl`/`Pagination` deleted outright rather than left dead, since the board fully replaces them (confirmed via grep before deleting). New `TaskBoard`/`BoardColumn`/`KanbanCard` components, a pure `taskBoard.ts` module (`groupByStatus`, `isValidMove`) kept framework-free and easy to reason about, and a `useTaskPermissions` hook extracting logic that used to be duplicated across the old row/card components. The board fetches once with `page_size=100` and no status filter (backend caps pagination at 100 with no "fetch all" escape hatch — documented as a deliberate limit in the README rather than a backend change), grouping by status client-side.
+
+**Rejected:** full optimistic cache patching (`onMutate`/rollback across every cached tasks query) for the drag interaction. With the filter model simplified down to just due-date filters, there's only ever one active cached tasks query for the board, so the existing `invalidateQueries` on mutation success already refetches almost immediately — a `pendingMoves` map (cleared `onSettled`) covers the one-round-trip visual gap without introducing rollback-race risk in the mutation layer. Also rejected: letting an assignee-only user drag a card between To do and In progress. They never had that right even via the old dropdown (`can_edit` is owner-only); the drag matrix mirrors the existing REST authorization exactly (owner: any move; assignee: only into Completed; completed tasks: never draggable, since un-completing would leave `completed_at` and the dispatched activity-log event stale) rather than inventing new rules for the new interaction.
+
+**A planning assumption that turned out wrong, caught by actually running it:** the implementation plan (written by a planning agent and reviewed before coding started) called for `@dnd-kit/sortable`'s `sortableKeyboardCoordinates` helper to handle arrow-key navigation between columns, reasoning it was "the standard way to get keyboard coordinate math without hand-rolling it." It compiled fine and looked plausible in code review. Live keyboard testing (`Tab` to a card's drag handle → `Space` to pick up → arrow key → `Space` to drop, verified against the real API response, not just visually) showed the pickup worked (`aria-pressed` flipped to `true`) but arrow keys never moved the drag position between columns at all. Digging into `@dnd-kit`'s own type definitions clarified why: that helper is built for reordering *within* a single `SortableContext` list, not jumping between independent `useDroppable` containers — a board's three columns are exactly the case it doesn't handle. Replaced it with a small custom `KeyboardCoordinateGetter` (`boardKeyboardCoordinates.ts`) that ranks the board's droppable columns left-to-right by their live rects and moves the virtual drag position to the next/previous column's center on arrow keys, then removed the now-unused `@dnd-kit/sortable` dependency entirely. Re-verified the same keyboard sequence afterward: correct column highlight during the move, correct status transition on drop, `completed_at` correctly set when dropped on Completed — and separately confirmed dnd-kit's `aria-live` announcement region actually receives text ("... is over the To do column.") rather than assuming the `announcements` prop wiring was sufficient on its own.
+
+**Validated:** `tsc -b` + `oxlint` clean; a live Playwright pass against the real Docker stack covering every branch of the authorization matrix with server-side confirmation, not just visual state — owner dragging To do → In progress → Completed (checked via `GET /tasks/{id}` that `status` and `completed_at` land correctly at each step); an assignee-only user dragging an invalid target (confirmed *no* PATCH request was even sent, via network interception, not just that the UI looked unchanged) and a valid one (confirmed the `/complete` POST fired and `completed_at` was set); the keyboard path end-to-end with API confirmation; a create/edit/delete smoke pass on the new cards; and a 390px mobile viewport check (columns stack to `grid-cols-1`, no horizontal page scroll). Test tasks created for the authorization scenarios were deleted again afterward rather than left in the seeded data.
+
+## 9c. Authorization: writing user stories exposed a client-only privacy rule
+
+**Prompt/goal:** "define user stories for user actions, e.g. 'the user should be able to …'". The stories were derived from what the code actually does, not from the spec, so every acceptance criterion could name the endpoint and test that proves it.
+
+**What that surfaced:** three gaps between the documented behavior and the real behavior. (1) `TaskAuthorizationService.can_view` returned `True` for everyone, and `GET /tasks` had no user scope, yet the board hid other users' tasks with a client-side `isVisibleToUser` filter. The UI *looked* private while any authenticated user could read every task with `curl`. (2) The board fetched one 100-item page, and there was no pagination UI. (3) Because of (1) and (2), totals were counted before the client filter, so they were wrong. None of this was caught by the test suite, which tested each layer's rule faithfully; the layers just disagreed with each other. The question "what exactly should a user be able to see?" is what exposed it.
+
+**Decided with the user** (two explicit questions, not picked silently): visibility is limited to Owner or Assignee and **enforced on the server**, and the Kanban board is replaced by a paginated list.
+
+**Accepted:**
+- `ListTasksUseCase` always sets `TaskFilters.visible_to = current_user.id`. The scope lives in the use case, not in a route or query parameter, so no caller can forget it or widen it. A dedicated unit test passes someone else's id and asserts it's overridden.
+- One `get_visible_task` helper is used by all five single-task use cases, instead of five copies of "load, then check".
+- A task the user can't see returns **404, identical to a nonexistent id**. `403` is kept for "you can see it but can't do this" (an assignee reassigning).
+
+**Rejected:**
+- **403 for strangers:** it confirms the task exists, so task ids could be probed.
+- **Keeping the client-side filter as well as the server scope:** redundant, and it would hide a future server regression.
+- **Per-column "load more" for the board:** offered to the user, who chose a plain list instead.
+
+**Two bugs found by running it, not by type-checking or linting:**
+- A headless-browser check found that the edit form's new status `<select>` and the filter bar's both rendered `id="status"`, because `Select` derives its id from `name`. The modal's label pointed at the wrong control. The same issue existed on every row's assignee dropdown (`id="assigned_to"` ×20), which the old board also had. Both now get explicit ids.
+- The first version of the seed backlog cycled status and assignee on the same `index % 3`, so every carol task came out COMPLETED and every bob task IN_PROGRESS. A `GROUP BY` over a throwaway seeded database caught it. It now uses `index // 3`, which covers all nine combinations.
+
+**Consciously left as-is:** `PATCH` with `status: COMPLETED` doesn't set `completed_at` or enqueue the activity job; only `POST /complete` does. The UI no longer offers that transition in the edit form, and it's listed as a known limitation in `docs/user-stories.md` rather than fixed quietly beyond the agreed scope.
+
+**Validated:**
+- Unit tests were changed or added first and confirmed failing (15 red) before implementation.
+- The full backend suite passes (127 tests, 97.75% coverage), with `ruff` and `mypy --strict` clean.
+- Live API check as two seeded users: each list contains only their own or assigned tasks with the correct `total`, and a stranger gets `404` on GET, PATCH and DELETE.
+- Playwright run against the Docker stack with 23 tasks: 20 + 3 rows over two pages, Next disabled on the last page, a filter change resets to page 1, another user's task never appears, no horizontal overflow at 390px, and no React warnings in the console.
+
+## 9d. Frontend: a visual design pass, and a time-zone bug hiding in "overdue"
+
+**Prompt/goal:** "review and improve the frontend design", run through a design-review skill that asks for a written plan (palette, type, layout) and a check of that plan against generic defaults before any code.
+
+**Review finding:** the UI worked but was the stock template: `blue-600` accents, `gray-50` page, rounded cards with soft shadows, ALL-CAPS column headers, pill badges. Nothing in it was specific to tasks or deadlines.
+
+**Accepted:**
+- Design tokens in `index.css` (`@theme`): a sage "paper" with a green-black ink. Colour is kept for meaning only: indigo for in progress and focus, green for done, brick for overdue and destructive actions. The primary button is ink rather than a brand blue.
+- A **date stub** (`DateStub.tsx`), a small calendar leaf that leads each row, because due date is what people scan a queue by. It's brick when overdue, inverted when due today, dashed when there's no date, and faded when done. Screen readers get a full sentence ("Overdue, was due Sep 21, 2026").
+- Status as a progress glyph (empty ring, half-filled ring, check) instead of three colour pills. The status filter became a segmented control built on native radios, so arrow-key navigation comes free.
+- "6 days late" and "Due today" next to the status. Specific action labels ("Create task" / "Save changes" instead of "Save"). Pagination shows "21–35 of 35". Shared `AuthLayout` for login and register (the markup had been duplicated). A real `Textarea` for descriptions.
+
+**Rejected:** a dark mode (no requirement asked for it, and it doubles the visual QA). Also a strikethrough on done titles, which hurts readability; done rows are muted instead.
+
+**Found by looking, not by the compiler:**
+- `isOverdue` computed "today" with `new Date().toISOString()`, which is the **UTC** date. West of UTC in the evening, a task due today was already flagged overdue (and the reverse happened east of UTC after midnight). It now uses the local calendar date, and a date-only `due_date` is parsed at local midnight.
+- In the first screenshot the edit/delete icons rendered 8px wide. Measuring the element showed why: the icon-only buttons combined `size="sm"` (`px-3`) with an override `px-0`, and which class wins depends on stylesheet order, not on the order in `className`. The fix was an explicit `size="icon"` variant on `Button` rather than a stronger override. The same reasoning produced a `compact` option on `Select` for the in-row assignee picker, instead of fighting `h-10` with `h-8`.
+
+**Validated:** `tsc -b` + `vite build` clean. `oxlint` shows no new warnings; one fast-refresh warning my change introduced was fixed by moving `STATUS_LABELS` to `lib/taskStatus.ts`. Playwright screenshots against the Docker stack at 1360px and 390px covered login (empty and error states), the dashboard, the new-task and delete dialogs, a filtered empty state and the icon measurement. No console errors apart from the expected 401 from the session probe before sign-in.
+
+## 9e. Frontend: turning the tokens into a documented design system
+
+**Prompt/goal:** "add a design system". Planned before coding, with two decisions put to the user: how to document it (a dev-only preview page, **Storybook**, or docs only) and whether to adopt a component library (**stay home-made** on Tailwind, or rebuild on shadcn/Radix). The user chose Storybook and home-made.
+
+**Accepted:**
+- `src/styles/tokens.css` as the single source of visual values. Beyond colour, it now defines a named type scale (`text-label`, `text-lead`, `text-title`, `text-display`…), radius by hierarchy (`segment` < `control` < `sheet`), `max-w-auth`, and the modal animations. The 14 kinds of one-off value (`text-[13px]` ×8 and so on) are gone; three layout/selector exceptions remain, each with a comment.
+- An `Alert` component. The same error markup had been copied into four places (login, register, task form, confirm dialog), with a fifth near-copy for success.
+- `components/ui/index.ts` as the component layer's single entry point, and `Badge.tsx` renamed `StatusBadge.tsx` to match what it exports.
+- Storybook 10 (`@storybook/react-vite`) with only two addons: docs and a11y. It has 41 stories across 8 docs pages. The **Foundations** page imports `tokens.css` as raw text and parses it, so the values and their comments on the page can't drift from the source.
+
+**Rejected:**
+- `storybook init`: it adds example stories, extra addons and a Vitest setup, all of which would then need removing. The four packages were installed directly instead.
+- `@theme static` to expose every token as a CSS variable for the docs: it would also emit all of Tailwind's default palette into the app's CSS.
+- Stories for `Header`, `TaskListItem` and `AssigneeSelect`: they need auth and React Query providers, so mocking those would test wiring rather than design.
+- Raising Vite's chunk-size warning for the app: it's raised only in `.storybook/main.ts`. The large chunks there are Storybook's runtime and axe-core, which no end user downloads.
+
+**Found by the tooling, not by review:**
+- **Four WCAG contrast failures that were in the app, not just in Storybook.** axe (the a11y addon's engine) flagged `done` at 4.37:1 on `paper` (AA needs 4.5), and `faint` at 2.6–3.0:1 on text that carried real information: the done date stub, the completion date and "Unassigned". The fix was partly a value change and partly a rule. `done` was darkened to `#2a7352` (at least 4.79:1). `faint` can't reach 4.5 without becoming `muted` and losing the hierarchy, so it's now **non-text only** (icons, spinners, disabled states, at least 3:1), and informational text moved to `muted`. The rule is written into the token comments, the Foundations page and `docs/design-system.md`.
+- **No `<main>` landmark on the login and register pages**, found by running axe against the live app as well as the stories. `AuthLayout`'s wrapper is now `<main>`.
+
+**Validated:**
+- **Pixel-identical refactor.** Before touching anything, Playwright captured 10 screens (login, login errors, dashboard, the new-task and delete dialogs, filtered and empty states) at 1360px and 390px, and these were diffed with `pixelmatch` after the migration. The comparison itself had to be made deterministic first. Two runs of the *unchanged* app differed because of three things: a users-query loading race (the selects were captured while still disabled), a focus-colour transition, and native `<select>` text landing on different sub-pixel positions from run to run. The fixes were waiting for the selects to be enabled, disabling animations, turning off LCD antialiasing and masking the `<select>` boxes.
+- With that in place, the token migration, the `Alert` extraction and the barrel imports produced **0 changed pixels on all 10 screens**. Before trusting that, I checked the dev server really was serving the new CSS, since §8 records a stale-bundle failure in this same setup. The later contrast fix changed pixels only where expected: the done rows and one placeholder.
+- A Playwright pass over all 49 Storybook entries with axe injected showed no console errors and no violations. axe on 7 live app screens came back clean.
+- `tsc -b`, `oxlint` (no new warnings), `vite build` and `storybook build` all pass.
+
+---
+
 ## 10. Security review highlights
 
+- **Access token in an httpOnly cookie, not `localStorage`:** see §9a — closes off token theft via XSS; CSRF mitigated via `SameSite=Lax` plus a strict CORS origin allowlist rather than a separate token scheme.
 - **Password hashing:** Argon2 (`argon2-cffi`), not a rolled-my-own or deprecated scheme.
 - **No password hashes in any response:** enforced by `UserResponse` only ever exposing `id`/`email`/`is_active` — verified by an explicit assertion in `test_register_creates_user` and `test_list_users_returns_all_users_without_password_hash`.
 - **JWT secret validated at startup**, not defaulted — `Settings` has no fallback value for `JWT_SECRET_KEY`; a missing one fails immediately via Pydantic, not on first request.
