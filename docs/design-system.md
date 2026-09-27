@@ -85,8 +85,11 @@ site can't pair them wrongly. Tailwind's built-in `text-sm`, `text-lg`,
 
 ## Verifying a change
 
-- `npm run lint`, `npm run build` and `npm run build-storybook`.
-- For refactors that shouldn't change the look, compare before/after
-  screenshots of the running app. The token migration was checked this way,
-  and 10 screens at two widths came out pixel-identical. See
-  [ai-development.md §9e](ai-development.md).
+- `npm run lint` (fails on warnings), `npm run build` (strict TypeScript),
+  then `npm run build-storybook && npm run test:storybook`, which runs axe and
+  checks for console errors on every story.
+- For refactors that shouldn't change the look, run
+  `npm run test:visual:baseline` before the change and `npm run test:visual`
+  after it. Any differing pixel fails, so every difference must be explained.
+  The token migration was checked this way, and its screens at two widths
+  came out pixel-identical. See [ai-development.md §9e](ai-development.md).

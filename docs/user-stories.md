@@ -2,7 +2,7 @@
 
 What a user can do in the Task Manager, and the rules each action follows. Every story has acceptance criteria and a **Covered by** line naming the endpoint and the tests that check it, so each behavior can be traced to code.
 
-Test paths are relative to `backend/tests/`. `unit/…` tests use in-memory fakes; `integration/…` tests hit a real Postgres database through the HTTP API or repository.
+Backend test paths are relative to `backend/tests/`: `unit/…` tests use in-memory fakes, and `integration/…` tests hit a real Postgres database through the HTTP API or repository. Paths starting `e2e/` are Playwright tests in `frontend/e2e/app/`, run in a real browser against the running stack (in CI too), at desktop and mobile widths.
 
 ## Roles
 
@@ -25,8 +25,9 @@ A task is visible **only to its Owner and Assignee**. To everyone else it behave
 - A valid email and a password of 8–128 characters create an active account → `201`, and the response never includes the password or its hash.
 - An already-registered email → `400` "Email is already registered".
 - A malformed email or too-short password → `422`, with the error shown on the form field.
+- The registration page opens when visited directly (typed URL, bookmark, reload), not only through the link on the login page.
 
-**Covered by:** `POST /api/v1/auth/register` · `integration/api/test_auth_endpoints.py::test_register_creates_user`, `::test_register_rejects_duplicate_email`, `::test_register_rejects_invalid_payload` · `unit/application/test_register_user_use_case.py`
+**Covered by:** `POST /api/v1/auth/register` · `integration/api/test_auth_endpoints.py::test_register_creates_user`, `::test_register_rejects_duplicate_email`, `::test_register_rejects_invalid_payload` · `unit/application/test_register_user_use_case.py` · `e2e/smoke.spec.ts` › *can open the registration page directly*
 
 ### US-1.2 — Log in
 **The visitor should be able to log in with their email and password, so that they can reach their tasks.**
@@ -66,7 +67,7 @@ A task is visible **only to its Owner and Assignee**. To everyone else it behave
 - A visitor opening the dashboard is redirected to `/login`.
 - A logged-in user opening `/login` or `/register` is redirected to the dashboard.
 
-**Covered by:** frontend `ProtectedRoute` / `PublicOnlyRoute`, checked in a headless browser (no automated frontend test suite).
+**Covered by:** frontend `ProtectedRoute` / `PublicOnlyRoute` · `e2e/smoke.spec.ts` › *is sent to sign in when opening the dashboard*. The logged-in redirect away from `/login` and `/register` was checked by hand in a browser and has no automated test.
 
 ---
 
@@ -189,12 +190,12 @@ A task is visible **only to its Owner and Assignee**. To everyone else it behave
 - Filters and the current page are kept in the URL (`?status=…&due_date_from=…&page=…`).
 - **Clear filters** resets all of them at once.
 
-**Covered by:** frontend `taskFilterState.ts`, checked in a headless browser.
+**Covered by:** frontend `taskFilterState.ts` · `e2e/smoke.spec.ts` › *status filter goes to the URL, the API and the list*, › *filters survive a reload and clear in one click*
 
 ### US-4.4 — Paginate
 **The user should be able to page through their tasks 20 at a time, so that long lists stay fast and readable.**
 
-- The dashboard shows "Page X of Y · N tasks" with Previous and Next buttons, each disabled at its end of the list.
+- The dashboard shows the range being viewed (for example "21–35 of 35") with Previous and Next buttons, each disabled at its end of the list.
 - Changing any filter goes back to page 1.
 - If the current page no longer exists (for example after deleting the last task on the last page), the app moves to the last page that does.
 - The API rejects `page` < 1 and `page_size` > 100 with `422`. A page past the end returns an empty `items` list.
@@ -241,5 +242,5 @@ A task is visible **only to its Owner and Assignee**. To everyone else it behave
 
 ## Known limitations
 
-- **No automated frontend tests.** Stories marked "checked in a headless browser" were verified with a scripted Playwright run, which isn't part of CI.
+- **Frontend tests cover wiring, not every rule.** The Playwright suite (`frontend/e2e/`) checks the main flows, route guards, filters and accessibility against the real stack. Business rules are tested in the backend suite, and the UI only mirrors them. Where a story relies on a manual browser check, its **Covered by** line says so.
 - **Completing via PATCH.** `PATCH` with `status: COMPLETED` sets the status but doesn't set `completed_at` or enqueue the activity job; only `POST /tasks/{id}/complete` does both. The UI never sends it, since the edit form doesn't offer *Completed* as a new status, but a direct API caller can. Fixing it means routing that case through the completion use case.

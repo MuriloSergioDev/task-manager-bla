@@ -1,8 +1,8 @@
 # Architecture Proposal (Phase 1)
 
-This document is the Phase 1 deliverable required by `claude.md` before any implementation begins: directory structure, database schema, API endpoint list, authentication flow, background-processing flow, frontend architecture, testing strategy, and Docker architecture. No code has been written yet — this is the design that Phase 2 onward will implement against.
+This document is the Phase 1 deliverable required by the [specification](specification.md) before any implementation begins: directory structure, database schema, API endpoint list, authentication flow, background-processing flow, frontend architecture, testing strategy, and Docker architecture. No code has been written yet — this is the design that Phase 2 onward will implement against.
 
-Two points in `claude.md` were ambiguous and have been resolved with the user before writing this document; both are reflected throughout below and are restated in [Recorded Decisions](#recorded-decisions).
+Two points in the [specification](specification.md) were ambiguous and have been resolved with the user before writing this document; both are reflected throughout below and are restated in [Recorded Decisions](#recorded-decisions).
 
 ---
 
@@ -253,9 +253,9 @@ Base path: `/api/v1`. Everything except `/health`, `/auth/register`, and `/auth/
 | POST | `/tasks/{id}/complete` | required, **owner or assignee** | — | `TaskResponse` | 200, 401, 403, 404 |
 | POST | `/tasks/{id}/assign` | required, **owner-only** | `{assigned_to: uuid \| null}` | `TaskResponse` | 200, 401, 403, 404, 422 |
 
-**Register endpoint details.** `POST /auth/register` checks email uniqueness (duplicate → `400`, staying within the status codes `claude.md` enumerates rather than introducing a `409`), hashes the password the same way login-created seed users are hashed, and creates the user as `is_active=true`. It does **not** auto-login — registration and login stay separate use cases (`register_user.py` / `login_user.py`), so the client calls `/auth/login` afterward. It shares the login endpoint's strict rate-limit tier since both are abuse-prone, unauthenticated, credential-adjacent endpoints.
+**Register endpoint details.** `POST /auth/register` checks email uniqueness (duplicate → `400`, staying within the status codes the [specification](specification.md) enumerates rather than introducing a `409`), hashes the password the same way login-created seed users are hashed, and creates the user as `is_active=true`. It does **not** auto-login — registration and login stay separate use cases (`register_user.py` / `login_user.py`), so the client calls `/auth/login` afterward. It shares the login endpoint's strict rate-limit tier since both are abuse-prone, unauthenticated, credential-adjacent endpoints.
 
-**Why separate `/complete` and `/assign` instead of overloading PATCH.** `PATCH` still accepts `status`/`assigned_to` for flexibility, but dedicated actions exist because `claude.md` calls out "mark completed" and "assign" as first-class actions with distinct authorization (assignee *can* complete but *cannot* reassign) — folding that into one generic PATCH would blur field-level authorization. Frontend action buttons map 1:1 to these endpoints.
+**Why separate `/complete` and `/assign` instead of overloading PATCH.** `PATCH` still accepts `status`/`assigned_to` for flexibility, but dedicated actions exist because the [specification](specification.md) calls out "mark completed" and "assign" as first-class actions with distinct authorization (assignee *can* complete but *cannot* reassign) — folding that into one generic PATCH would blur field-level authorization. Frontend action buttons map 1:1 to these endpoints.
 
 ---
 
@@ -336,7 +336,7 @@ def record_task_completed_activity(self, task_id: str, actor_user_id: str, previ
 
 ## 7. Testing Strategy
 
-Mapped to `claude.md`'s required coverage list:
+Mapped to the [specification](specification.md)'s required coverage list:
 
 - `tests/unit/domain/test_authorization_service.py` — owner can edit/delete; assignee can complete but not edit; non-owner forbidden.
 - `tests/unit/application/*` — use-case logic in isolation with in-memory fake repositories (fast, no DB), including `register_user` (duplicate email rejection) and `login_user`.
@@ -347,13 +347,20 @@ Mapped to `claude.md`'s required coverage list:
 - `tests/integration/api/test_rate_limiting.py` — see flakiness note below.
 - `tests/integration/workers/test_celery_dispatch.py` — eager-mode end-to-end + mocked-`.delay()` assertion.
 
-**DB integration strategy: real Postgres, not SQLite.** Integration/API tests run against an actual Postgres instance (a `db-test` Compose service). The schema relies on Postgres-native features (native `ENUM`, `gen_random_uuid()`, `JSONB`) that SQLite doesn't faithfully emulate, and `claude.md` explicitly names PostgreSQL — testing against a different engine would risk false confidence. Each integration test runs inside a transaction rolled back afterward (fixture-wrapped async session), keeping tests isolated and fast without full teardown/recreation per test. Alembic migrations run once per test session to guarantee schema parity with production. Unit tests use in-memory fakes only — no DB — keeping the pyramid's base fast, which is exactly why the repository interfaces in `domain/repositories/` exist.
+**DB integration strategy: real Postgres, not SQLite.** Integration/API tests run against an actual Postgres instance (a `db-test` Compose service). The schema relies on Postgres-native features (native `ENUM`, `gen_random_uuid()`, `JSONB`) that SQLite doesn't faithfully emulate, and the [specification](specification.md) explicitly names PostgreSQL — testing against a different engine would risk false confidence. Each integration test runs inside a transaction rolled back afterward (fixture-wrapped async session), keeping tests isolated and fast without full teardown/recreation per test. Alembic migrations run once per test session to guarantee schema parity with production. Unit tests use in-memory fakes only — no DB — keeping the pyramid's base fast, which is exactly why the repository interfaces in `domain/repositories/` exist.
 
 **Rate-limit test flakiness avoidance.** No wall-clock timing. A test-only settings override lowers the limiter's configured limit (e.g., `2/minute`) so a handful of fast requests deterministically exceeds it, and the limiter's in-memory storage is reset between tests so prior tests' counts don't leak forward.
 
 **Celery dispatch tests without a worker.** `CELERY_TASK_ALWAYS_EAGER` for integration-style verification; `.delay()` mocking for unit-style dispatch verification. No real Redis broker or worker process needed for the automated suite; the `celery-worker` Compose service is exercised only in manual/smoke validation (Phase 9).
 
 **Coverage.** `pytest-cov` gate at 80%, configured in `pyproject.toml`; unit tests carry most of the coverage cheaply, integration tests validate the wiring.
+
+*Amended during implementation:* the frontend gained three automated layers on top of this backend pyramid, all Playwright:
+- `frontend/e2e/app/smoke.spec.ts` for the main flows and route guards against the real stack;
+- `a11y.spec.ts`, which runs axe on every screen and dialog;
+- `frontend/e2e/storybook/`, which runs axe and checks for console errors on every component story.
+
+Pixel comparison (`visual.spec.ts`) is an on-demand before/after tool, not a committed baseline. GitHub Actions (`.github/workflows/ci.yml`) runs the backend suite, the frontend checks, and the e2e suite against a freshly built and seeded Docker Compose stack.
 
 ---
 
@@ -379,20 +386,20 @@ Mapped to `claude.md`'s required coverage list:
 
 ## Recorded Decisions
 
-Decisions made explicit due to ambiguity in `claude.md`, confirmed with the user before this document was written:
+Decisions made explicit due to ambiguity in the [specification](specification.md), confirmed with the user before this document was written:
 
-1. **Authorization model.** Any authenticated user can **view** all tasks. Any authenticated user can **create** a task, becoming its `owner_id`. Only the **owner** can **update**, **delete**, or **reassign** a task — this is the "private resource" `claude.md` says must not be manipulated by another user. The **owner or the current assignee** can **complete** a task, since completing is the act of doing assigned work, not a structural edit. This required adding an `owner_id` column to `tasks` distinct from the spec's literally-enumerated `assigned_to`.
+1. **Authorization model.** Any authenticated user can **view** all tasks. Any authenticated user can **create** a task, becoming its `owner_id`. Only the **owner** can **update**, **delete**, or **reassign** a task — this is the "private resource" the [specification](specification.md) says must not be manipulated by another user. The **owner or the current assignee** can **complete** a task, since completing is the act of doing assigned work, not a structural edit. This required adding an `owner_id` column to `tasks` distinct from the spec's literally-enumerated `assigned_to`.
    *Amended during implementation:* the assignee can also edit and delete (only reassignment stays owner-only), and **viewing** is restricted to owner or assignee — other users get `404` for the task and never see it in lists. See the README's "Design Decisions" for the current rule.
-2. **Self-registration.** A public `POST /api/v1/auth/register` endpoint exists, in addition to seed-provided demo users — `claude.md` only mentions login and seed data, so this is an addition beyond the literal spec, made at the user's request.
-3. **Access-token-only authentication.** No refresh-token flow; a single short-lived (default 30 min, configurable) JWT. `claude.md` mentions only "Access token," never a refresh flow — adding one would be an unrequested abstraction.
-4. **Database testing strategy.** Real Postgres (via a Compose test service + per-test transactional rollback) for integration/API tests; in-memory fakes (no DB) for unit tests. Chosen over SQLite because the schema uses Postgres-specific features `claude.md` explicitly asks for.
+2. **Self-registration.** A public `POST /api/v1/auth/register` endpoint exists, in addition to seed-provided demo users — the [specification](specification.md) only mentions login and seed data, so this is an addition beyond the literal spec, made at the user's request.
+3. **Access-token-only authentication.** No refresh-token flow; a single short-lived (default 30 min, configurable) JWT. The [specification](specification.md) mentions only "Access token," never a refresh flow — adding one would be an unrequested abstraction.
+4. **Database testing strategy.** Real Postgres (via a Compose test service + per-test transactional rollback) for integration/API tests; in-memory fakes (no DB) for unit tests. Chosen over SQLite because the schema uses Postgres-specific features the [specification](specification.md) explicitly asks for.
 5. **`due_date` is a `DATE`, not a timestamp** — tasks are "due on a day," and this keeps `due_date_from`/`due_date_to` simple inclusive date bounds with no timezone ambiguity.
 6. **Pagination:** default `page_size=20`, hard cap `page_size<=100` (422 if exceeded).
-7. **Rate limits:** general API `100/minute` per client key (IP or user id), `/auth/login` and `/auth/register` both `5/minute` per IP — documented as tunable via config, with SlowAPI's in-memory/per-instance limitation called out in the README per `claude.md`'s instruction.
+7. **Rate limits:** general API `100/minute` per client key (IP or user id), `/auth/login` and `/auth/register` both `5/minute` per IP — documented as tunable via config, with SlowAPI's in-memory/per-instance limitation called out in the README per the [specification](specification.md)'s instruction.
 8. **`/tasks/{id}/assign` never transfers ownership** — `assigned_to` and `owner_id` are fully independent; reassigning work never changes who controls the record.
 
 ---
 
 ## Next Step
 
-Per `claude.md`'s explicit instruction not to implement the entire project in one step, Phase 2 (backend foundation: project config, database setup, SQLAlchemy models, Alembic, health check, base API structure, and tests) is a separate step to be started only after this architecture is reviewed.
+Per the [specification](specification.md)'s explicit instruction not to implement the entire project in one step, Phase 2 (backend foundation: project config, database setup, SQLAlchemy models, Alembic, health check, base API structure, and tests) is a separate step to be started only after this architecture is reviewed.

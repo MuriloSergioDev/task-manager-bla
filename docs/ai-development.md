@@ -1,6 +1,6 @@
 # AI-Assisted Development Log
 
-This project was built end-to-end with **Claude Code** (Anthropic) as the implementation agent, working from the specification in `claude.md` through nine phases (architecture → backend foundation → auth → task management → filtering/pagination → security/infrastructure → frontend → seed/docs → final review). This document records the significant instances where generated output was evaluated, changed, or rejected, rather than accepted uncritically — per the specification's explicit requirement that AI be used as "an engineering assistant rather than an unquestioned code generator."
+This project was built end-to-end with **Claude Code** (Anthropic) as the implementation agent, working from [the specification](specification.md) (originally the repository's `CLAUDE.md`) through nine phases (architecture → backend foundation → auth → task management → filtering/pagination → security/infrastructure → frontend → seed/docs → final review). This document records the significant instances where generated output was evaluated, changed, or rejected, rather than accepted uncritically — per the specification's explicit requirement that AI be used as "an engineering assistant rather than an unquestioned code generator."
 
 Each entry follows: prompt/goal → generated approach → accepted/rejected → why → how validated.
 
@@ -19,6 +19,8 @@ Each entry follows: prompt/goal → generated approach → accepted/rejected →
 **Why:** The rejected options either violate the explicit spec requirement or produce user-hostile behavior no one asked for. The accepted model is the minimum structure that satisfies the stated constraint without introducing RBAC complexity the spec explicitly warns against.
 
 **Validated:** `tests/unit/domain/test_authorization_service.py`, written test-first (confirmed failing before `TaskAuthorizationService` existed, per the spec's TDD instruction for significant business behavior) — four tests covering owner/assignee/stranger permutations, including a specific check that an unassigned task's `assigned_to = None` is never treated as a wildcard match for "anyone can complete it."
+
+*Later amended:* two changes came later. The assignee may also edit and delete a task, so only reassignment stays owner-only. And viewing became restricted to the owner or assignee (§9c). The README's "Authorization model" has the current rule.
 
 ---
 
@@ -142,6 +144,8 @@ Each entry follows: prompt/goal → generated approach → accepted/rejected →
 
 **Validated:** a Playwright script seeded `localStorage` with a token whose `exp` was already in the past (plus a stale cached user), navigated to `/dashboard`, and asserted an immediate redirect to `/login` with the token cleared — confirming the fix without needing to wait out a real 30-minute expiry.
 
+*Later superseded:* §9a moved the token into an httpOnly cookie, so there is no client-side token left to go stale. The session is now restored from `GET /auth/me` on load.
+
 ---
 
 ## 9. API design: the one inconsistent error shape, found by actually triggering it
@@ -242,7 +246,7 @@ Each entry follows: prompt/goal → generated approach → accepted/rejected →
 - `src/styles/tokens.css` as the single source of visual values. Beyond colour, it now defines a named type scale (`text-label`, `text-lead`, `text-title`, `text-display`…), radius by hierarchy (`segment` < `control` < `sheet`), `max-w-auth`, and the modal animations. The 14 kinds of one-off value (`text-[13px]` ×8 and so on) are gone; three layout/selector exceptions remain, each with a comment.
 - An `Alert` component. The same error markup had been copied into four places (login, register, task form, confirm dialog), with a fifth near-copy for success.
 - `components/ui/index.ts` as the component layer's single entry point, and `Badge.tsx` renamed `StatusBadge.tsx` to match what it exports.
-- Storybook 10 (`@storybook/react-vite`) with only two addons: docs and a11y. It has 41 stories across 8 docs pages. The **Foundations** page imports `tokens.css` as raw text and parses it, so the values and their comments on the page can't drift from the source.
+- Storybook 10 (`@storybook/react-vite`) with only two addons: docs and a11y. It has 40 stories and 9 docs pages (Foundations plus one per component group). *Corrected in §9f:* this entry first said 41 stories and 8 docs pages, a count that was never checked against the build. The **Foundations** page imports `tokens.css` as raw text and parses it, so the values and their comments on the page can't drift from the source.
 
 **Rejected:**
 - `storybook init`: it adds example stories, extra addons and a Vitest setup, all of which would then need removing. The four packages were installed directly instead.
@@ -257,8 +261,54 @@ Each entry follows: prompt/goal → generated approach → accepted/rejected →
 **Validated:**
 - **Pixel-identical refactor.** Before touching anything, Playwright captured 10 screens (login, login errors, dashboard, the new-task and delete dialogs, filtered and empty states) at 1360px and 390px, and these were diffed with `pixelmatch` after the migration. The comparison itself had to be made deterministic first. Two runs of the *unchanged* app differed because of three things: a users-query loading race (the selects were captured while still disabled), a focus-colour transition, and native `<select>` text landing on different sub-pixel positions from run to run. The fixes were waiting for the selects to be enabled, disabling animations, turning off LCD antialiasing and masking the `<select>` boxes.
 - With that in place, the token migration, the `Alert` extraction and the barrel imports produced **0 changed pixels on all 10 screens**. Before trusting that, I checked the dev server really was serving the new CSS, since §8 records a stale-bundle failure in this same setup. The later contrast fix changed pixels only where expected: the done rows and one placeholder.
-- A Playwright pass over all 49 Storybook entries with axe injected showed no console errors and no violations. axe on 7 live app screens came back clean.
+- A Playwright pass over all 49 Storybook entries with axe injected showed no console errors and no violations. axe on the live app came back clean for 6 of the 7 screens it claimed. *Corrected in §9f:* the "register" check had been redirected to `/login` by an app bug, so it audited the login page a second time and never audited registration.
 - `tsc -b`, `oxlint` (no new warnings), `vite build` and `storybook build` all pass.
+
+---
+
+## 9f. Pre-evaluation audit: moving the checks into the repo exposed a bug and two of my own false claims
+
+**Prompt/goal:** "Make sure everything is ready to be evaluated... don't leave anything that would relate to bad usage of AI." This was read as an audit for the tells of careless AI use: unverified numbers, stale docs, template leftovers, dead code, suppressed warnings, and checks that exist only in a chat transcript.
+
+**Audit findings, all fixed:**
+- **Template leftovers.** `frontend/README.md` was still the stock Vite template, and `public/icons.svg`, `src/assets/vite.svg` and `alembic/README` were unused boilerplate. The README was rewritten and the rest deleted.
+- **`strict` was never enabled** in `tsconfig.app.json` or `tsconfig.node.json`. Enabling it produced zero errors, so the code was already strict-clean and only the guarantee was missing. It's now on for app, node and e2e code.
+- **Three long-standing lint warnings**, fixed at the cause rather than silenced:
+  - `authContext.tsx` exported a hook next to a component, which breaks Fast Refresh. It's now split into `authContext.ts`, `AuthProvider.tsx` and `useAuth.ts`.
+  - `RegisterForm` called react-hook-form's `watch()` inside a validator. Validators already receive the form values, so it now uses those.
+  - `TaskFormModal` wired `watch`/`setValue` to a custom select by hand. It now uses `Controller`.
+
+  `npm run lint` now runs with `--deny-warnings`, so warnings can't creep back.
+- **Stale docs.** The README and a user story still described the pagination text as "Page X of Y · N tasks". A "known limitation" said there were no automated frontend tests, which was no longer true.
+- **Claims re-verified, not assumed.**
+  - The README's seed figures were checked against a throwaway database (created, migrated, seeded, counted, dropped): 37 tasks, 35 visible to alice, all three statuses, and overdue, undated and unassigned tasks present.
+  - Coverage (97.75%), the test count (127) and `ruff format` (108 files clean) were re-run.
+
+**The ad-hoc checks from earlier sessions became real test suites**, using Playwright Test with `@axe-core/playwright` instead of scripts in a scratch directory:
+- `frontend/e2e/app/` has smoke flows, route guards and axe on every screen, at desktop and mobile widths.
+- `frontend/e2e/storybook/` generates one test per story from the built index.
+- `visual.spec.ts` is the before/after pixel-diff workflow.
+
+Rewriting them properly exposed:
+- **A real app bug.** A signed-out visitor opening `/register` by URL was bounced to `/login`. The `/auth/me` session probe returns 401 when nobody is signed in, and the API client's global "401 → redirect to /login" handler fired on it. Only the in-app link to the page worked. The fix exempts `/api/v1/auth/*` responses from that redirect (a 401 there just means "not signed in", which the route guards already handle). A regression test (`e2e/app/smoke.spec.ts` › *can open the registration page directly*) and a user-story criterion were added.
+- **My own false claim, caused by that bug.** §9e reported "axe on 7 live app screens came back clean". The earlier throwaway script visited `/register`, was silently redirected, and audited the login page again. Registration had never been audited. §9e is corrected in place rather than rewritten.
+- **A misreported number of mine.** §9e said 41 stories across 8 docs pages. The generated suite enumerates 40 stories, and there are 9 docs pages. That count had been typed from memory, not read from the build.
+- **Test-design mistakes**, fixed in the tests, not the app:
+  - Locators matched several elements (the user's email is also in the assignee options, and a task's title is also in the delete dialog's preview).
+  - One test expected the header email on mobile, where it is hidden by design.
+  - A filter test assumed the dev database held in-progress tasks. It now checks the wiring whatever the data: the request carries `status=IN_PROGRESS`, the server returns only in-progress tasks, and the list renders exactly that many rows.
+- **A flaky accessibility result.** In the full run, axe reported a colour-contrast failure in the delete dialog that didn't reproduce on its own. The cause: axe measured text while the dialog was still fading in, at partial opacity. The fix waits for the dialog's animations to finish (`waitForDialog`). The alternatives were forcing reduced motion, which would test different CSS than users get, or loosening the rule.
+
+**Rejected:**
+- **Committed visual baselines.** The seed data's due dates are relative to the seed day, and screenshots differ by OS, so a committed baseline would fail for reasons unrelated to the code. The visual suite is an explicit before/after tool instead.
+- **Storybook's Vitest addon** for story tests: it adds more configuration, and Playwright was already the browser-test tool.
+
+**Validated:**
+- `npm run test:e2e`: 26 passed (13 tests × 2 viewports), after two consecutive clean runs of the previous 24-test version.
+- `npm run test:storybook`: 40 passed.
+- Visual baseline then compare on unchanged code: 12 of 12 identical.
+- `tsc -b` (strict) clean, and `oxlint --deny-warnings` clean.
+- Backend: 127 passed, 97.75% coverage, and `ruff`, `ruff format` and `mypy --strict` clean.
 
 ---
 
@@ -280,3 +330,33 @@ Each entry follows: prompt/goal → generated approach → accepted/rejected →
 - **Pagination is mandatory**, not optional: `GET /tasks` always returns a bounded page (`page_size` capped at 100, `422` if exceeded), never an unbounded table scan.
 - **`SELECT COUNT(*)`** for pagination totals runs as a separate, indexable query rather than fetching all matching rows and counting in Python.
 - Index-usage verification via `EXPLAIN` was deliberately deferred to the final review phase rather than asserted in a unit test: Postgres correctly prefers a sequential scan over an index scan on the tiny tables integration tests create, so an `EXPLAIN`-based assertion at that data volume would be testing the query planner's good judgment, not a regression.
+
+---
+
+## 12. Harness: how the repo is set up for AI-assisted work
+
+**Prompt/goal:** "Should we structure skills, subagents and other harness stuff for the project?" The answer was yes, but only where it pays for itself.
+
+**Accepted:**
+- **A short `CLAUDE.md`.** The original was the 1,018-line build specification. It's kept word for word as [specification.md](specification.md), with a note explaining its role. There were three reasons to replace it:
+  - Its phases were finished, so every session paid context for instructions that no longer applied.
+  - It lacked the operational knowledge that had actually caused mistakes: the login rate limit, the dev tools living in the venv rather than the container, the Windows bind mount, cookie-only auth, and the `faint`-is-not-for-text rule.
+  - It was named `claude.md` in lowercase, which only loads on case-insensitive filesystems.
+
+  The new file is about 100 lines: a code map, commands, the rules that matter here, those gotchas, and working agreements ("verify before claiming").
+- **Two project skills** (`.claude/skills/`), each for a workflow that was repeated and has non-obvious steps:
+  - `/validate` runs the whole validation pass in the right order. It includes the lessons above: don't report a step you didn't run, work out whether the app or the test is wrong before changing either, and explain every changed pixel.
+  - `/log-ai-decision` keeps this document in its format and holds it to the same honesty rules (real numbers only, include your own mistakes, amend instead of contradicting).
+- **CI** (`.github/workflows/ci.yml`), the guardrail that doesn't depend on the agent:
+  - backend `ruff`, `ruff format`, `mypy --strict` and pytest with coverage against a Postgres service;
+  - frontend lint (warnings fail), strict build, Storybook build and Storybook accessibility;
+  - the Playwright e2e suite against a freshly built and seeded `docker compose` stack, set up with the same commands the README gives a new developer.
+
+**Rejected:**
+- **Custom subagents.** The built-in review, security-review, explore and plan agents already cover this project's needs, so a custom "reviewer" would repeat them with a narrower prompt.
+- **Hooks.** Format-on-edit repeats the linters CI already enforces and slows every edit. A local commit-blocking hook would be invisible to reviewers, whereas CI is visible on every commit.
+- **MCP servers.** Nothing in this project needs an external system.
+
+Each of these can be added the day a real need appears. Adding them pre-emptively would be the "unnecessary abstraction" the specification warns against.
+
+**Validated:** every command in `CLAUDE.md` and in the `/validate` skill was run as written during this pass. The results are in §9f.

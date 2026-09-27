@@ -1,10 +1,12 @@
 # Task Management App
 
+[![CI](https://github.com/MuriloSergioDev/task-manager-bla/actions/workflows/ci.yml/badge.svg)](https://github.com/MuriloSergioDev/task-manager-bla/actions/workflows/ci.yml)
+
 A full-stack task management application built as a technical-interview exercise, demonstrating Clean Architecture on the backend, a typed React frontend, JWT authentication, background job processing, and a fully containerized development stack.
 
 ## Overview
 
-Users can register, log in, create/view/update/delete tasks, assign tasks to other users, mark tasks complete, filter tasks by status and due date, and paginate results. The full set of user-facing behavior, with acceptance criteria mapped to endpoints and tests, is in [docs/user-stories.md](docs/user-stories.md). The application demonstrates production-quality engineering practices at interview scope: layered backend architecture, comprehensive automated testing (unit + integration + API), rate limiting, async background processing, and a responsive typed frontend.
+Users can register, log in, create/view/update/delete tasks, assign tasks to other users, mark tasks complete, filter tasks by status and due date, and paginate results. The full set of user-facing behavior, with acceptance criteria mapped to endpoints and tests, is in [docs/user-stories.md](docs/user-stories.md). The application demonstrates production-quality engineering practices at interview scope: layered backend architecture, comprehensive automated testing (unit, integration and API tests, plus browser end-to-end and accessibility tests) run in CI, rate limiting, async background processing, and a responsive typed frontend.
 
 ## Architecture
 
@@ -170,6 +172,8 @@ The seed script is idempotent — it checks whether `alice@example.com` already 
 
 ## Running Tests
 
+Backend:
+
 ```bash
 cd backend
 pytest                              # full suite (unit + integration)
@@ -180,6 +184,19 @@ pytest tests/integration            # integration/API tests — needs Postgres r
 Integration tests run against a **real** Postgres database (the schema uses native `ENUM`/`JSONB`/UUID types that SQLite doesn't faithfully emulate) via a dedicated `taskdb_test` database, wrapped in a per-test transaction that's always rolled back — tests never see each other's data, and nothing they write persists.
 
 `taskdb_test` is created automatically the first time `postgres`'s volume initializes (via `postgres-init/01-create-test-db.sh`), so `docker compose up` alone is enough. Running Postgres outside Docker instead? Create it yourself: `createdb -U <user> taskdb_test`, then `DATABASE_URL=postgresql+asyncpg://.../taskdb_test alembic upgrade head` to migrate it.
+
+Frontend (from `frontend/`; install the browser once with `npx playwright install chromium`):
+
+```bash
+npm run lint                        # oxlint, fails on warnings
+npm run build                       # strict TypeScript (app, node and e2e configs) + production build
+npm run build-storybook && npm run test:storybook   # axe + console errors on every component story
+npm run test:e2e                    # Playwright against the running, seeded stack: main flows + axe on every screen
+```
+
+`test:e2e` runs at desktop and mobile widths and signs in once per run, because login is rate-limited. For refactors that shouldn't change the UI, `npm run test:visual:baseline` before and `npm run test:visual` after compare every screen pixel by pixel.
+
+**CI** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs all of this on every push and pull request: the backend suite against Postgres, frontend lint, build and Storybook accessibility, and the e2e suite against a freshly built and seeded `docker compose` stack. The e2e job uses the same setup steps as [Setup](#setup) above.
 
 ## Coverage
 
@@ -222,7 +239,7 @@ These are local-development-only credentials for a project with no real users. N
 
 **Authorization model.** Tasks are **private to the people involved**: a user can only see tasks they own or are assigned to. This is enforced on the server — `ListTasksUseCase` always scopes the query to the current user (it's not a client-supplied filter, so no route can forget or widen it), and every single-task use case loads through `get_visible_task`. A task you can't see returns **`404`, not `403`**, identical to a nonexistent id, so task ids can't be probed to learn what exists; `403` is reserved for users who *can* see a task but lack a specific permission (an assignee trying to reassign). An earlier version let any authenticated user read every task via the API while the UI hid them client-side — writing the user stories exposed that mismatch (see [docs/ai-development.md](docs/ai-development.md)). The **owner or current assignee** may update, delete, or complete a task; only the **owner** may reassign it to someone else — reassignment hands off record-level control, which is a different decision from doing the work itself, so it stays narrower than edit/delete. This required adding an `owner_id` column distinct from `assigned_to`: ownership and assignment are different concerns, and collapsing them would either let a stranger manipulate a task they have no relationship to, or block the person actually doing the work from managing it.
 
-**Dashboard: paginated list, not a board.** Tasks are shown as a server-paginated list (20 per page, Previous/Next, "Page X of Y · N tasks"), with page and filters in the URL. An earlier drag-and-drop Kanban board was replaced: a board wants every task at once, which meant fetching one 100-item page and bucketing client-side — incompatible with real pagination and with accurate totals. The list shows one grid row per task on desktop and stacks into cards on mobile. Status changes go through the edit form (To do / In progress, or reopening a completed task — the backend clears `completed_at` when status moves away from `COMPLETED`), while completing uses the dedicated **Complete** action, because `POST /tasks/{id}/complete` is what stamps `completed_at` and enqueues the activity job. Reassignment stays owner-only; non-owners see the assignee as read-only text. The UI hides actions the user can't perform, but the API remains the actual authority.
+**Dashboard: paginated list, not a board.** Tasks are shown as a server-paginated list (20 per page, Previous/Next, showing the range, e.g. "21–35 of 35"), with page and filters in the URL. An earlier drag-and-drop Kanban board was replaced: a board wants every task at once, which meant fetching one 100-item page and bucketing client-side — incompatible with real pagination and with accurate totals. The list shows one grid row per task on desktop and stacks into cards on mobile. Status changes go through the edit form (To do / In progress, or reopening a completed task — the backend clears `completed_at` when status moves away from `COMPLETED`), while completing uses the dedicated **Complete** action, because `POST /tasks/{id}/complete` is what stamps `completed_at` and enqueues the activity job. Reassignment stays owner-only; non-owners see the assignee as read-only text. The UI hides actions the user can't perform, but the API remains the actual authority.
 
 **No refresh tokens.** A single short-lived (30 min default) access token; on expiry, the frontend redirects to login. Refresh-token rotation is real complexity (secure storage, revocation, rotation-on-use) that wasn't asked for.
 
@@ -240,15 +257,34 @@ These are local-development-only credentials for a project with no real users. N
 
 ## AI-Assisted Development
 
-**Tool.** Claude Code (Anthropic) was the implementation agent across all nine phases of `claude.md`'s workflow — architecture proposal through final review — not a one-off autocomplete or a single "generate the app" prompt.
+**Tool.** Claude Code (Anthropic) was the implementation agent across all nine phases of the [specification](docs/specification.md)'s workflow — architecture proposal through final review — not a one-off autocomplete or a single "generate the app" prompt.
 
-**How prompts were structured.** Each phase was driven by the corresponding section of `claude.md` plus the accumulated context of prior phases (existing schema, existing use-case patterns, existing test fixtures), so later code stayed consistent with earlier decisions rather than reinventing patterns per file. Where the spec was genuinely ambiguous (see "Design Decisions" above), the ambiguity was surfaced as an explicit question before writing code, not resolved by guessing silently.
+**How the repository is set up for AI-assisted work.** Three pieces:
+- [`CLAUDE.md`](CLAUDE.md): the agent's short, current instructions. It covers the architecture rules, and environment gotchas learned the hard way (the login rate limit, the dev tools living in the venv rather than the API container, the Vite bind mount).
+- Two project skills in [`.claude/skills/`](.claude/skills/): `/validate` runs the full validation pass in order and reports it honestly, and `/log-ai-decision` keeps [docs/ai-development.md](docs/ai-development.md) consistent and truthful.
+- CI, as the check that doesn't depend on the agent at all.
 
-**How generated code was validated.** Every phase ended with the same gate before moving on: the full test suite, `ruff check` + `ruff format --check`, `mypy --strict` (backend) or `tsc --noEmit` + `oxlint` (frontend) — and, critically, a live smoke test against the real stack (a running `uvicorn`/Celery worker/Postgres/Redis, or a real headless browser via Playwright), not just green checkmarks from static tools. Phase 9's final review went a step further and tore the whole stack down to a genuinely empty volume (`docker compose down -v`) rather than reusing containers that had been running since Phase 6 — which is what it took to surface a real migration race (below). A few examples of what a live pass caught that static checks and re-used containers didn't:
+Custom subagents, hooks and MCP servers were deliberately left out. The reasons are in [§12 of the log](docs/ai-development.md#12-harness-how-the-repo-is-set-up-for-ai-assisted-work).
+
+**How prompts were structured.** Each phase was driven by the corresponding section of the [specification](docs/specification.md) plus the accumulated context of prior phases (existing schema, existing use-case patterns, existing test fixtures), so later code stayed consistent with earlier decisions rather than reinventing patterns per file. Where the spec was genuinely ambiguous (see "Design Decisions" above), the ambiguity was surfaced as an explicit question before writing code, not resolved by guessing silently.
+
+**How generated code was validated.** Every phase ended with the same gate before moving on: the full test suite, `ruff check` + `ruff format --check`, `mypy --strict` (backend) or `tsc --noEmit` + `oxlint` (frontend) — and, critically, a live smoke test against the real stack (a running `uvicorn`/Celery worker/Postgres/Redis, or a real headless browser via Playwright), not just green checkmarks from static tools. Phase 9's final review went a step further and tore the whole stack down to a genuinely empty volume (`docker compose down -v`) rather than reusing containers that had been running since Phase 6 — which is what it took to surface a real migration race (below). These checks now run on every push in CI (see [Running Tests](#running-tests)). A few examples of what a live pass caught that static checks and re-used containers didn't:
 
 - The Celery background task reused the app's pooled async database engine. Unit tests (which use a fake dispatcher) never touch it, so this passed every unit test — but failed the first time the task actually ran, in its own integration test, because `asyncio.run()` tears down its event loop on every call and a pooled asyncpg connection can't survive across loops.
 - `TaskFormModal` rendered inside each table row's fragment, landing as a direct child of `<tbody>` — invalid HTML that browsers silently "fix" visually, so `tsc` and a lint pass both stayed clean. A real headless-Chromium pass (Playwright) surfaced the React hydration warning in the console.
 - Both `api` and `celery-worker` ran migrations on startup, documented at the time as "harmless." That was true against the already-migrated volume every phase since Phase 6 had been reusing — but a truly fresh `docker compose up --build` had both containers race on creating Alembic's own version-tracking table, and one lost. Only `down -v` followed by a real cold start reproduced it.
+
+**What AI-generated code was changed.** Each item below was generated or planned by the AI, then corrected once review or validation showed it was wrong:
+- a literal reading of the spec's authorization rules ([§1](docs/ai-development.md#1-architecture-resolving-the-ownershipassignment-ambiguity));
+- a Celery task that reused the web app's connection pool across event loops (§5a);
+- migrations running in two containers at once (§6);
+- permanent database errors being retried like transient ones (§7);
+- task visibility enforced only in the UI while the API returned everything (§9c);
+- an "overdue" check that used the UTC date (§9d);
+- text colours that failed WCAG contrast (§9e);
+- a global 401 handler that made `/register` unreachable by URL, and a TypeScript config that never enabled `strict` (§9f).
+
+Each entry in the log records what was rejected as well as what was accepted.
 
 **How edge cases were handled.** Inactive users, expired/malformed/wrong-secret tokens, duplicate-email registration, unknown assignees, tasks with no due date under a range filter, pagination past the last page, and rate-limit exhaustion are each an explicit test case (see `backend/tests/`), not just the happy path. A Phase 9 pass added two more found by deliberately trying to break things rather than just re-confirming the golden path: completing a task and immediately deleting it races the async activity-log write against the delete (a permanent `IntegrityError`, now failed fast instead of retried three times), and a stale/expired token left in `localStorage` from a previous session now failed auth immediately on load instead of flashing the dashboard first (this applied when the access token was still stored in `localStorage`; it has since moved to an httpOnly cookie — see "Design Decisions" — which sidesteps the client-side staleness check entirely by never giving the frontend a token to read). On the frontend, loading/empty/error states are handled explicitly per screen (not just the "data arrived" case), and the dashboard's task list stacks each row into a card on narrow viewports rather than squishing columns or letting the page body scroll sideways.
 
