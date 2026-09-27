@@ -1,20 +1,11 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { createContext, type ReactNode, useContext } from 'react'
+import type { ReactNode } from 'react'
 
 import type { User } from '../../types/user'
 import { getCurrentUser, logout as logoutRequest } from './authApi'
+import { AuthContext } from './authContext'
 
 const CURRENT_USER_QUERY_KEY = ['auth', 'me'] as const
-
-interface AuthContextValue {
-  user: User | null
-  isAuthenticated: boolean
-  isLoading: boolean
-  login: (user: User) => void
-  logout: () => void
-}
-
-const AuthContext = createContext<AuthContextValue | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient()
@@ -51,12 +42,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       {children}
     </AuthContext.Provider>
   )
-}
-
-export function useAuth(): AuthContextValue {
-  const context = useContext(AuthContext)
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider')
-  }
-  return context
 }

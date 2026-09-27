@@ -12,7 +12,12 @@ export const apiClient = axios.create({
 apiClient.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
-    if (error.response?.status === 401 && window.location.pathname !== '/login') {
+    // A 401 from an auth endpoint just means "not signed in" (the /auth/me
+    // session probe, or a failed login) and the route guards handle it.
+    // Redirecting on those would bounce a signed-out visitor off /register.
+    // Any other 401 means the session expired mid-use: sign in again.
+    const isAuthEndpoint = error.config?.url?.startsWith('/api/v1/auth/') ?? false
+    if (error.response?.status === 401 && !isAuthEndpoint && window.location.pathname !== '/login') {
       window.location.href = '/login'
     }
 

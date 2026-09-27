@@ -1,6 +1,6 @@
 import { LogOut } from 'lucide-react'
 
-import { useAuth } from '../../features/auth/authContext'
+import { useAuth } from '../../features/auth/useAuth'
 import { Button } from '../ui/Button'
 import { Wordmark } from './Wordmark'
 

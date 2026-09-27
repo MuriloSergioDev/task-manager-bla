@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import type { ApiError } from '../../../types/api'
 import type { User } from '../../../types/user'
 import { login, type AuthCredentials } from '../authApi'
-import { useAuth } from '../authContext'
+import { useAuth } from '../useAuth'
 
 export function useLogin() {
   const { login: setAuth } = useAuth()

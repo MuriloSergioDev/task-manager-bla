@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { Navigate } from 'react-router-dom'
 
-import { useAuth } from '../../features/auth/authContext'
+import { useAuth } from '../../features/auth/useAuth'
 import { Spinner } from '../ui/Spinner'
 
 export function ProtectedRoute({ children }: { children: ReactNode }) {

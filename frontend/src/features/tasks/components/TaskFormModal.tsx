@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useForm } from 'react-hook-form'
+import { Controller, useForm } from 'react-hook-form'
 
 import { Alert, Button, Input, Modal, Select, Textarea } from '../../../components/ui'
 import type { Task, TaskStatus } from '../../../types/task'
@@ -40,8 +40,7 @@ export function TaskFormModal({ isOpen, onClose, task }: TaskFormModalProps) {
     register,
     handleSubmit,
     reset,
-    setValue,
-    watch,
+    control,
     formState: { errors },
   } = useForm<TaskFormValues>({
     defaultValues: { title: '', description: '', due_date: '', assigned_to: '', status: 'TODO' },
@@ -123,9 +122,10 @@ export function TaskFormModal({ isOpen, onClose, task }: TaskFormModalProps) {
           )}
         </div>
         {!isEditing && (
-          <AssigneeSelect
-            value={watch('assigned_to')}
-            onChange={(value) => setValue('assigned_to', value)}
+          <Controller
+            name="assigned_to"
+            control={control}
+            render={({ field }) => <AssigneeSelect value={field.value} onChange={field.onChange} />}
           />
         )}
 

@@ -14,7 +14,6 @@ export function RegisterForm() {
   const {
     register,
     handleSubmit,
-    watch,
     formState: { errors },
   } = useForm<RegisterFormValues>()
   const registerMutation = useRegister()
@@ -52,7 +51,7 @@ export function RegisterForm() {
         error={errors.confirmPassword?.message}
         {...register('confirmPassword', {
           required: 'Please confirm your password',
-          validate: (value) => value === watch('password') || 'Passwords do not match',
+          validate: (value, formValues) => value === formValues.password || 'Passwords do not match',
         })}
       />
 

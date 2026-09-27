@@ -1,5 +1,5 @@
 import type { Task } from '../../../types/task'
-import { useAuth } from '../../auth/authContext'
+import { useAuth } from '../../auth/useAuth'
 
 /** Mirrors backend TaskAuthorizationService so the UI only offers actions
  *  the API will accept; the API remains the actual enforcement point. */
