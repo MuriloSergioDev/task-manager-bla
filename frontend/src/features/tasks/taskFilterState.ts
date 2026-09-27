@@ -1,5 +1,6 @@
 import { useSearchParams } from 'react-router-dom'
 
+import { isTaskStatus } from '../../lib/taskStatus'
 import type { TaskFilterValues, TaskStatus } from '../../types/task'
 
 // Well under the API's cap of 100 (backend/app/presentation/api/dependencies/
@@ -14,13 +15,22 @@ export interface TaskQueryParams {
   page_size: number
 }
 
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
+
+function parseDate(value: string | null): string | undefined {
+  return value !== null && ISO_DATE.test(value) ? value : undefined
+}
+
+/** Values the API would reject (an unknown status, a malformed date, e.g.
+ *  from a hand-edited or stale URL) are dropped rather than sent, so the
+ *  dashboard shows unfiltered tasks instead of an error. */
 export function parseTaskFilters(searchParams: URLSearchParams): TaskFilterValues {
-  const status = searchParams.get('status') as TaskStatus | null
+  const status = searchParams.get('status')
 
   return {
-    status: status ?? undefined,
-    dueDateFrom: searchParams.get('due_date_from') ?? undefined,
-    dueDateTo: searchParams.get('due_date_to') ?? undefined,
+    status: isTaskStatus(status) ? status : undefined,
+    dueDateFrom: parseDate(searchParams.get('due_date_from')),
+    dueDateTo: parseDate(searchParams.get('due_date_to')),
   }
 }
 
