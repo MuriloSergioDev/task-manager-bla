@@ -10,15 +10,16 @@ interface TaskRowActionsProps {
   task: Task
   canEdit: boolean
   canComplete: boolean
+  canDelete: boolean
   onEdit: () => void
 }
 
-export function TaskRowActions({ task, canEdit, canComplete, onEdit }: TaskRowActionsProps) {
+export function TaskRowActions({ task, canEdit, canComplete, canDelete, onEdit }: TaskRowActionsProps) {
   const completeTask = useCompleteTask()
   const deleteTask = useDeleteTask()
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
 
-  if (!canComplete && !canEdit) {
+  if (!canComplete && !canEdit && !canDelete) {
     return null
   }
 
@@ -37,18 +38,20 @@ export function TaskRowActions({ task, canEdit, canComplete, onEdit }: TaskRowAc
         </Button>
       )}
       {canEdit && (
+        <Button
+          // Icon-only so the row's one labelled action, Complete, stands
+          // out; each still has a task-specific accessible name.
+          variant="ghost"
+          size="icon"
+          onClick={onEdit}
+          aria-label={`Edit "${task.title}"`}
+          title="Edit"
+        >
+          <Pencil className="h-4 w-4" aria-hidden="true" />
+        </Button>
+      )}
+      {canDelete && (
         <>
-          <Button
-            // Icon-only so the row's one labelled action, Complete, stands
-            // out; each still has a task-specific accessible name.
-            variant="ghost"
-            size="icon"
-            onClick={onEdit}
-            aria-label={`Edit "${task.title}"`}
-            title="Edit"
-          >
-            <Pencil className="h-4 w-4" aria-hidden="true" />
-          </Button>
           <Button
             variant="ghost"
             size="icon"

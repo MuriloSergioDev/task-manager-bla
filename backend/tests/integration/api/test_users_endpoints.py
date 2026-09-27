@@ -29,6 +29,7 @@ async def test_list_users_returns_all_users_without_password_hash(client: AsyncC
     body = response.json()
     emails = {item["email"] for item in body["items"]}
     assert {"users-list-1@example.com", "users-list-2@example.com"} <= emails
+    # A directory for the assignee picker: identity only, nothing about the
+    # account's state.
     for item in body["items"]:
-        assert "password_hash" not in item
-        assert "password" not in item
+        assert set(item) == {"id", "email"}

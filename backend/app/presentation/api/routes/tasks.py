@@ -24,7 +24,12 @@ from app.core.dependencies import (
     get_user_repository,
 )
 from app.domain.entities.user import User
-from app.domain.exceptions import AssigneeNotFoundError, TaskAuthorizationError, TaskNotFoundError
+from app.domain.exceptions import (
+    AssigneeNotFoundError,
+    InvalidStatusChangeError,
+    TaskAuthorizationError,
+    TaskNotFoundError,
+)
 from app.domain.repositories.task_repository import TaskFilters, TaskRepository
 from app.domain.repositories.user_repository import UserRepository
 from app.domain.services.activity_dispatcher import ActivityDispatcher
@@ -108,13 +113,16 @@ async def update_task(
     user_repository: Annotated[UserRepository, Depends(get_user_repository)],
 ) -> TaskResponse:
     use_case = UpdateTaskUseCase(task_repository=task_repository, user_repository=user_repository)
-    updates = payload.model_dump(exclude_unset=True)
     try:
-        task = await use_case.execute(task_id=task_id, current_user=current_user, updates=updates)
+        task = await use_case.execute(task_id=task_id, current_user=current_user, changes=payload)
     except TaskNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found") from exc
     except TaskAuthorizationError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except InvalidStatusChangeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
     except AssigneeNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,

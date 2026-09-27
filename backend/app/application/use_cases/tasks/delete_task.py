@@ -16,6 +16,6 @@ class DeleteTaskUseCase:
         task = await get_visible_task(self.task_repository, task_id, current_user)
 
         if not TaskAuthorizationService.can_delete(current_user, task):
-            raise TaskAuthorizationError("Only the task owner or assignee can delete this task")
+            raise TaskAuthorizationError("Only the task owner can delete this task")
 
         await self.task_repository.delete(task_id)

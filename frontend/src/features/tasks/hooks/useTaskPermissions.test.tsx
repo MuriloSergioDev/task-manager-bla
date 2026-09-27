@@ -9,8 +9,8 @@ import { AuthContext } from '../../auth/authContext'
 import { useTaskPermissions } from './useTaskPermissions'
 
 // Mirrors backend TaskAuthorizationService (tested there as the real
-// enforcement point): owner and assignee may edit, delete and complete;
-// only the owner may reassign.
+// enforcement point): owner and assignee may edit and complete; only the
+// owner may delete or reassign.
 
 function permissionsFor(user: User | null, task: Task) {
   const wrapper = ({ children }: { children: ReactNode }) => (
@@ -29,21 +29,32 @@ const stranger = makeUser({ id: 'stranger-1', email: 'carol@example.com' })
 const task = makeTask({ owner_id: owner.id, assigned_to: assignee.id })
 
 describe('useTaskPermissions', () => {
-  it('lets the owner edit, complete and reassign', () => {
-    expect(permissionsFor(owner, task)).toMatchObject({ isOwner: true, canEdit: true, canComplete: true })
+  it('lets the owner edit, complete, delete and reassign', () => {
+    expect(permissionsFor(owner, task)).toMatchObject({
+      isOwner: true,
+      canEdit: true,
+      canComplete: true,
+      canDelete: true,
+    })
   })
 
-  it('lets the assignee edit and complete, but not reassign', () => {
+  it('lets the assignee edit and complete, but not delete or reassign', () => {
     expect(permissionsFor(assignee, task)).toMatchObject({
       isOwner: false,
       isAssignee: true,
       canEdit: true,
       canComplete: true,
+      canDelete: false,
     })
   })
 
   it('gives anyone else no actions', () => {
-    expect(permissionsFor(stranger, task)).toMatchObject({ isInvolved: false, canEdit: false, canComplete: false })
+    expect(permissionsFor(stranger, task)).toMatchObject({
+      isInvolved: false,
+      canEdit: false,
+      canComplete: false,
+      canDelete: false,
+    })
   })
 
   it('does not offer "Complete" on a task that is already done', () => {

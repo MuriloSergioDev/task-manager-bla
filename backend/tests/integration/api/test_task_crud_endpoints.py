@@ -238,7 +238,7 @@ async def test_stranger_deleting_task_gets_404(client: AsyncClient) -> None:
     assert owner_view.status_code == 200
 
 
-async def test_assignee_can_delete_task(client: AsyncClient) -> None:
+async def test_assignee_cannot_delete_task(client: AsyncClient) -> None:
     owner_token = await _register_and_login(client, "assignee-delete-owner@example.com")
     assignee_response = await client.post(
         "/api/v1/auth/register",
@@ -258,7 +258,9 @@ async def test_assignee_can_delete_task(client: AsyncClient) -> None:
         f"/api/v1/tasks/{task_id}", cookies=_auth_cookies(assignee_token)
     )
 
-    assert response.status_code == 204
+    assert response.status_code == 403
+    owner_view = await client.get(f"/api/v1/tasks/{task_id}", cookies=_auth_cookies(owner_token))
+    assert owner_view.status_code == 200
 
 
 async def test_delete_nonexistent_task_returns_404(client: AsyncClient) -> None:
@@ -299,3 +301,78 @@ async def test_list_tasks_requires_authentication(client: AsyncClient) -> None:
     response = await client.get("/api/v1/tasks")
 
     assert response.status_code == 401
+
+
+async def test_update_rejects_explicit_null_for_required_fields(client: AsyncClient) -> None:
+    token = await _register_and_login(client, "null-patch@example.com")
+    create_response = await client.post(
+        "/api/v1/tasks", json={"title": "Keep my title"}, cookies=_auth_cookies(token)
+    )
+    task_id = create_response.json()["id"]
+
+    for field in ("title", "status"):
+        response = await client.patch(
+            f"/api/v1/tasks/{task_id}", json={field: None}, cookies=_auth_cookies(token)
+        )
+        assert response.status_code == 422, field
+
+    unchanged = await client.get(f"/api/v1/tasks/{task_id}", cookies=_auth_cookies(token))
+    assert unchanged.json()["title"] == "Keep my title"
+    assert unchanged.json()["status"] == "TODO"
+
+
+async def test_update_allows_explicit_null_for_optional_fields(client: AsyncClient) -> None:
+    token = await _register_and_login(client, "null-optional@example.com")
+    create_response = await client.post(
+        "/api/v1/tasks",
+        json={"title": "Has extras", "description": "Some text", "due_date": "2026-12-01"},
+        cookies=_auth_cookies(token),
+    )
+    task_id = create_response.json()["id"]
+
+    response = await client.patch(
+        f"/api/v1/tasks/{task_id}",
+        json={"description": None, "due_date": None},
+        cookies=_auth_cookies(token),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["description"] is None
+    assert response.json()["due_date"] is None
+
+
+async def test_update_cannot_complete_a_task(client: AsyncClient) -> None:
+    # Completing has its own endpoint because it stamps completed_at and
+    # enqueues the activity job; a PATCH to COMPLETED would do neither.
+    token = await _register_and_login(client, "patch-complete@example.com")
+    create_response = await client.post(
+        "/api/v1/tasks", json={"title": "Not done yet"}, cookies=_auth_cookies(token)
+    )
+    task_id = create_response.json()["id"]
+
+    response = await client.patch(
+        f"/api/v1/tasks/{task_id}", json={"status": "COMPLETED"}, cookies=_auth_cookies(token)
+    )
+
+    assert response.status_code == 422
+    unchanged = await client.get(f"/api/v1/tasks/{task_id}", cookies=_auth_cookies(token))
+    assert unchanged.json()["status"] == "TODO"
+    assert unchanged.json()["completed_at"] is None
+
+
+async def test_update_of_a_completed_task_may_restate_its_status(client: AsyncClient) -> None:
+    token = await _register_and_login(client, "patch-completed@example.com")
+    create_response = await client.post(
+        "/api/v1/tasks", json={"title": "Done"}, cookies=_auth_cookies(token)
+    )
+    task_id = create_response.json()["id"]
+    completed = await client.post(f"/api/v1/tasks/{task_id}/complete", cookies=_auth_cookies(token))
+
+    response = await client.patch(
+        f"/api/v1/tasks/{task_id}",
+        json={"title": "Done, renamed", "status": "COMPLETED"},
+        cookies=_auth_cookies(token),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["completed_at"] == completed.json()["completed_at"]

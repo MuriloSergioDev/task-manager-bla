@@ -8,3 +8,7 @@ class TaskAuthorizationError(Exception):
 
 class AssigneeNotFoundError(Exception):
     pass
+
+
+class InvalidStatusChangeError(Exception):
+    pass

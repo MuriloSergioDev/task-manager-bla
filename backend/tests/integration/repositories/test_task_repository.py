@@ -159,3 +159,35 @@ async def test_list_paginated_visible_to_matches_owner_or_assignee(
 
     assert total == 2
     assert {task.id for task in items} == {owned.id, assigned.id}
+
+
+async def test_list_paginated_pages_are_stable_when_created_at_ties(
+    db_session: AsyncSession,
+) -> None:
+    # Postgres's now() is the transaction's start time, so every task
+    # inserted in one transaction (the seed script, or this test) shares a
+    # created_at. Ordering by created_at alone leaves ties in no defined
+    # order, and LIMIT/OFFSET can then repeat or skip rows across pages.
+    owner = await _create_user(db_session, "tie-break-owner@example.com")
+    repository = SqlAlchemyTaskRepository(db_session)
+    created_ids = set()
+    for i in range(30):
+        task = await repository.create(
+            title=f"Tied task {i}",
+            description=None,
+            due_date=None,
+            owner_id=owner.id,
+            assigned_to=None,
+        )
+        created_ids.add(task.id)
+
+    seen_ids = []
+    for page in range(1, 6):
+        items, total = await repository.list_paginated(
+            page=page, page_size=7, filters=TaskFilters(visible_to=owner.id)
+        )
+        seen_ids.extend(item.id for item in items)
+
+    assert total == 30
+    assert len(seen_ids) == len(set(seen_ids)), "a task appeared on more than one page"
+    assert set(seen_ids) == created_ids

@@ -20,7 +20,7 @@ interface TaskListItemProps {
 /** One task: the date stub, then title/status/assignee/actions as a grid on
  *  md+ that stacks on small screens -- one element for both layouts. */
 export function TaskListItem({ task, users, onEdit }: TaskListItemProps) {
-  const { isOwner, canEdit, canComplete } = useTaskPermissions(task)
+  const { isOwner, canEdit, canComplete, canDelete } = useTaskPermissions(task)
   const assignTask = useAssignTask()
   const isDone = task.status === 'COMPLETED'
 
@@ -75,7 +75,13 @@ export function TaskListItem({ task, users, onEdit }: TaskListItemProps) {
           )}
         </div>
 
-        <TaskRowActions task={task} canEdit={canEdit} canComplete={canComplete} onEdit={onEdit} />
+        <TaskRowActions
+          task={task}
+          canEdit={canEdit}
+          canComplete={canComplete}
+          canDelete={canDelete}
+          onEdit={onEdit}
+        />
       </div>
     </li>
   )

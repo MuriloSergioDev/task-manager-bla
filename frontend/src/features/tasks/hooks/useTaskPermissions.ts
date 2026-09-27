@@ -12,6 +12,7 @@ export function useTaskPermissions(task: Task) {
 
   const canEdit = isInvolved
   const canComplete = isInvolved && task.status !== 'COMPLETED'
+  const canDelete = isOwner
 
-  return { isOwner, isAssignee, isInvolved, canEdit, canComplete }
+  return { isOwner, isAssignee, isInvolved, canEdit, canComplete, canDelete }
 }

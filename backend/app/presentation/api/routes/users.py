@@ -2,8 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends
 
-from app.application.schemas.user_list_schemas import UserListResponse
-from app.application.schemas.user_schemas import UserResponse
+from app.application.schemas.user_list_schemas import UserDirectoryEntry, UserListResponse
 from app.application.use_cases.users.list_users import ListUsersUseCase
 from app.core.dependencies import get_user_repository
 from app.domain.entities.user import User
@@ -20,4 +19,4 @@ async def list_users(
 ) -> UserListResponse:
     use_case = ListUsersUseCase(user_repository=user_repository)
     users = await use_case.execute()
-    return UserListResponse(items=[UserResponse.model_validate(user) for user in users])
+    return UserListResponse(items=[UserDirectoryEntry.model_validate(user) for user in users])

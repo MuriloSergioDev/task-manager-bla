@@ -41,7 +41,6 @@ describe('RegisterForm', () => {
     const register = vi.spyOn(authApi, 'register').mockResolvedValue({
       id: 'new-user',
       email: 'new@example.com',
-      is_active: true,
     })
     renderWithProviders(<RegisterForm />)
 

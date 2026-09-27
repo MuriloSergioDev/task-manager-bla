@@ -18,5 +18,5 @@ export function makeTask(overrides: Partial<Task> = {}): Task {
 }
 
 export function makeUser(overrides: Partial<User> = {}): User {
-  return { id: 'owner-1', email: 'alice@example.com', is_active: true, ...overrides }
+  return { id: 'owner-1', email: 'alice@example.com', ...overrides }
 }

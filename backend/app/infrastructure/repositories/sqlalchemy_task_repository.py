@@ -52,8 +52,13 @@ class SqlAlchemyTaskRepository:
 
         total = await self._session.scalar(count_query)
         offset = (page - 1) * page_size
+        # id breaks created_at ties: rows inserted in one transaction share
+        # now(), and without a total order LIMIT/OFFSET can repeat or skip
+        # them across pages.
         result = await self._session.execute(
-            list_query.order_by(TaskModel.created_at.desc()).offset(offset).limit(page_size)
+            list_query.order_by(TaskModel.created_at.desc(), TaskModel.id.desc())
+            .offset(offset)
+            .limit(page_size)
         )
         models = result.scalars().all()
         return [_to_entity(model) for model in models], total or 0

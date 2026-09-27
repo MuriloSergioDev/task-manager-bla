@@ -14,5 +14,7 @@ def rate_limit_exceeded_handler(request: Request, exc: Exception) -> Response:
     key, which would otherwise be the one inconsistent error shape in the
     API and silently defeat the frontend's shared error-message parsing."""
     assert isinstance(exc, RateLimitExceeded)
-    response = JSONResponse({"detail": f"Rate limit exceeded: {exc.detail}"}, status_code=429)
-    return limiter._inject_headers(response, request.state.view_rate_limit)
+    # slowapi's handler also calls the private limiter._inject_headers, but
+    # that only writes X-RateLimit-* headers when headers_enabled is on,
+    # which it isn't here -- so there's nothing to copy.
+    return JSONResponse({"detail": f"Rate limit exceeded: {exc.detail}"}, status_code=429)
